@@ -22,16 +22,23 @@ public class ClientMessageSender implements Runnable{
                 try{
                     //gets input from user and checks for quit command
                     message = scan.nextLine();
-                    if(message.contains("$quit")){
-                        client.sendMessage("$quit");
-                        client.closeConnection();
+                    if(message.substring(0,1).equals("@") && message.length() >1 && message.contains(" ")){
+                        String[] messageList = message.split(" ", 2);
+
+                        String receiver = messageList[0].substring(1);
+                        message = messageList[1];
+
+                        client.sendPrivateMessage(message,receiver);
+                    }
+                    else if(message.substring(0,1).equals("$") && message.length() >1 && !message.contains(" ")){
+                        client.sendServerCommand(message.substring(1));
                     }
                     else{
-                        client.sendMessage(message);
+                        client.sendPublicMessage(message);
                     }
 
                 }
-                catch (IOException e){
+                catch (Exception e){
                     System.out.println(e);
                 }
 

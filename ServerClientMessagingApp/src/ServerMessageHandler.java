@@ -1,17 +1,17 @@
-import java.io.IOException;
+import javax.crypto.SealedObject;
 import java.util.ArrayList;
 
 public class ServerMessageHandler implements  Runnable{
     private Server server;
     private ArrayList<String> userNameList;
     private String senderName;
-    private boolean online;
+    private RSA rsaUtil;
 
-    public ServerMessageHandler(Server server, String userName){
+    public ServerMessageHandler(Server server, String userName, RSA rsaUtil){
         this.server = server;
         this.userNameList = server.getUserNameList();
         this.senderName = userName;
-        this.online = true;
+        this.rsaUtil = rsaUtil;
 
 
     }
@@ -24,72 +24,40 @@ public class ServerMessageHandler implements  Runnable{
     public void run() {
         if(server != null){
 
-            String message;
+            Object[] items;
+            String command;
+            String option;
             String receiver;
-            String[] messageArray;
+            SealedObject message;
             System.out.println("user " + senderName + " message handler is running");
 
-
-            while(online){
+            while(server.isUserOnline(senderName)){
                 try{
-                    message = server.getMessage(senderName);
 
-                    if(message.equals("")){
-                        //do nothing
-                    }
-                    //private messages
-                    else if(message.substring(0,1).equals("@") && message.length() >1 && message.contains(" ")){
-
-                        messageArray = messageParser(message," ",2);
-                        receiver = messageArray[0].substring(1);
-                        message = senderName + ": " + messageArray[1];
-
-                        if(server.isUserOnline(receiver) == false){
-                            server.sendMessage("Server: user doesent exist",senderName);
-                        }
-                        else{
-                            server.sendMessage("pm"+ " " + message, receiver);
-                            server.sendMessage("pm" + " " + message, senderName);
-                        }
-
-                    }
-                    //server commands
-                    else if(message.substring(0,1).equals("$")){
-                        messageArray = messageParser(message," ",2);
-                        switch(messageArray[0]){
-                            case "$users":
-                                server.sendMessage("all users:", senderName);
-                                for(String users: userNameList){
-                                    server.sendMessage(users,senderName);
-                                }
-                                break;
-                            case "$help":
-                                server.sendMessage("Use @username to private message \nList of commands \n$users: lists users \n$help: lists help screen \n$quit leaves the server", senderName);
-                                break;
-                            case "$quit":
-                                server.sendMessageAll(senderName + " has left the server");
+                    items = server.getMessage(senderName);
+                    receiver = rsaUtil.decrypt((SealedObject) items[0]);
+                    if(receiver.equals("Server")){
+                        command = rsaUtil.decrypt((SealedObject)items[1]);
+                        switch (command){
+                            case("quit"):
                                 server.removeUser(senderName);
-                                online = false;
                                 break;
-
-                            default:
-                                server.sendMessageAll(senderName + ": " + message);
                         }
-
                     }
-                    //server chat
                     else{
-                        server.sendMessageAll(senderName + ": " + message);
+                        message = (SealedObject)items[1];
+                        server.sendMessage(receiver,message);
                     }
+
 
 
                 }
-               catch(IOException e){
+               catch(Exception e){
                     System.out.println(e);
                 }
 
             }
-            System.out.println("user" + senderName + "has left the server");
+            System.out.println("user " + senderName + " has left the server");
         }
     }
 }
