@@ -14,8 +14,9 @@ public class Server  {
     private Map<String, ObjectInputStream> userInput;
     private Map<String, ObjectOutputStream> userOutput;
     private ArrayList<String> userNameList;
-    private Map<String, PublicKey> userPublicKeyList;
+    private Map<String, User> userMap;
     private RSA rsaUtil;
+    private User serverUser;
 
 
 
@@ -26,8 +27,9 @@ public class Server  {
         userInput = new HashMap<String,ObjectInputStream>();
         userOutput = new HashMap<String,ObjectOutputStream>();
         userNameList = new ArrayList<String>();
-        userPublicKeyList = new HashMap<String,PublicKey>();
+        userMap = new HashMap<>();
         rsaUtil = new RSA();
+        serverUser = new User("Server",rsaUtil.getPublicKey());
 
 
         //declaring socket and stream variables
@@ -40,8 +42,8 @@ public class Server  {
         ss = new ServerSocket(port);
 
         while(true){
-
             s = ss.accept();
+
             //creating input and output data streams
             output = new ObjectOutputStream(s.getOutputStream());
             input = new ObjectInputStream(s.getInputStream());
@@ -67,10 +69,10 @@ public class Server  {
             userNameList.add(userName);
 
             //getting public key for user
-            userPublicKeyList.put(userName,(PublicKey) input.readObject());
+            userMap.put(userName,(User) input.readObject());
             System.out.println("got public key");
 
-            //placing user sockets and datastreams in hash maps
+            //placing user sockets and object streams in hash maps
             users.put(userName, s);
             userInput.put(userName, input);
             userOutput.put(userName, output);
@@ -81,14 +83,19 @@ public class Server  {
 
             //displaying newly added user
             System.out.println("user " + userName + " has been added to the server");
-            //sendMessage(rsaUtil.encrypt("welcome to the server " + userName, userPublicKeyList.get(userName)), userName);
+            //relayMessage(rsaUtil.encrypt("welcome to the server " + userName, userPublicKeyList.get(userName)), userName);
             sendMessageAll(userName + " has joined the server");
 
             //Sends keys to all users
-            sendKeys(userName, userPublicKeyList.get(userName));
-            sendServerKey(userName);
+            sendUsers(userName);
+            sendServerUser(userName);
         }
 
+    }
+
+    //gets message or command object from a specific senders input stream
+    public Object getObject(String Sender) throws Exception{
+        return userInput.get(Sender).readObject();
     }
 
     //removes all users references from maps
@@ -96,15 +103,14 @@ public class Server  {
         users.remove(userName);
         userInput.remove(userName);
         userOutput.remove(userName);
+        userMap.remove(userName);
         for(int i = 0; i<userNameList.size(); i++){
             if(userName.equals(userNameList.get(i))){
                 userNameList.remove(i);
-                userPublicKeyList.remove(i);
-                removeKeys(userName);
-                sendMessageAll(userName + " has Left");
             }
         }
-
+        sendCommandAll("removeuser",userName);
+        sendMessageAll(userName + " has Left");
     }
 
     //checks if the user is currently online
@@ -116,70 +122,74 @@ public class Server  {
         }
         return false;
     }
-
-    //method for server to get messages from users
-    public Object[] getMessage(String userName) throws Exception{
-        return (Object[]) userInput.get(userName).readObject();
+    
+    //Sends the servers user object to a single client
+    public void sendServerUser(String recipient) throws Exception{
+        userOutput.get(recipient).writeObject(serverUser);
     }
-
-    //method for server to send messages to users
-    public void sendMessage( String userName, SealedObject message) throws Exception{
-        userOutput.get(userName).writeObject(message);
+    
+    //sends all clients the newly created clients user object
+    public void sendUsers(String newUser) throws Exception{
+        for(int x = 0; x < userNameList.size(); x++){
+            userOutput.get(userNameList.get(x)).writeObject(userMap.get(newUser));
+        }
+        for(int x = 0; x < userNameList.size(); x++) {
+            if(!userNameList.get(x).equals(newUser)){
+                userOutput.get(newUser).writeObject(userMap.get(userNameList.get(x)));
+            }
+        }
     }
-
-    //sends encrypted message to all users
+    
+    //Sends a server command to a single recipient
+    public void sendCommand(String command, String option, String recipient)throws Exception{
+        userOutput.get(recipient).writeObject(buildEncryptedCommand(command,option,recipient));
+    }
+    
+    //Sends a server command to all clients on server
+    public void sendCommandAll(String command, String option) throws Exception{
+        for(int x = 0; x < userNameList.size(); x++){
+            sendCommand(command,option,userNameList.get(x));
+        }
+    }
+    
+    //Sends a message from the server to all clients
     public void sendMessageAll(String message) throws Exception{
-
-        for(int i = 0; i<userNameList.size(); i++){
-            String user = userNameList.get(i);
-            userOutput.get(user).writeObject(rsaUtil.encrypt(message,userPublicKeyList.get(user)));
+        for(int x = 0; x < userNameList.size(); x++){
+            sendMessage(message,userNameList.get(x));
         }
     }
 
-    public void sendKeys(String userName, PublicKey key) throws Exception{
-
-        String user;
-        //sends new user key to all other users
-        for(int i = 0; i<userNameList.size(); i++){
-            Object[] items = new Object[3];
-            user = userNameList.get(i);
-            items[0] = "keyadd";
-            items[1] = userName;
-            items[2] = key;
-            userOutput.get(user).writeObject(items);
-        }
-        //sends all user keys to new user
-        for(int i = 0; i <userNameList.size(); i++){
-            Object[] items = new Object[3];
-            items[0] = "keyadd";
-            items[1] = userNameList.get(i);
-            items[2] = userPublicKeyList.get(userNameList.get(i));
-            userOutput.get(userName).writeObject(items);
-
-        }
+    //Sends a single message from the server to a single recipient
+    public void sendMessage(String message, String recipient) throws Exception{
+        userOutput.get(recipient).writeObject(buildEncryptedMessage(message,recipient));
+    }
+    
+    //relays a message from the sender to the recipient without looking at the contents of the message
+    public void relayMessage(Message m) throws Exception{
+        userOutput.get(rsaUtil.decrypt(m.getRecipient())).writeObject(m);
     }
 
-    public void sendServerKey(String userName) throws Exception{
-        Object[] items = new Object[3];
-        items[0] = "keyadd";
-        items[1] = "Server";
-        items[2] = rsaUtil.getPublicKey();
-        userOutput.get(userName).writeObject(items);
+    //builds an encrypted message object given strings of the message body and recipient
+    public Message buildEncryptedMessage(String message, String recipient) throws Exception{
+        //creating encrypted message objects
+        SealedObject messageEnc = rsaUtil.encrypt(message,userMap.get(recipient).getPublicKey());
+        SealedObject senderEnc = rsaUtil.encrypt("Server", userMap.get(recipient).getPublicKey());
+        SealedObject recipientEnc = rsaUtil.encrypt(recipient, userMap.get(recipient).getPublicKey());
+
+        return new Message(messageEnc,senderEnc,recipientEnc);
     }
 
-    public void removeKeys(String userName) throws Exception{
-        String user;
-        //sends new user key to all other users
-        for(int i = 0; i<userNameList.size(); i++){
-            Object[] items = new Object[3];
-            user = userNameList.get(i);
-            items[0] = "keyremove";
-            items[1] = userName;
-            userOutput.get(user).writeObject(items);
+    //builds an encrypted command object given the command an option and a recipient
+    public Command buildEncryptedCommand(String command, String option, String recipient) throws Exception{
+        SealedObject commandEnc = rsaUtil.encrypt(command,userMap.get(recipient).getPublicKey());
+        SealedObject optionEnc = rsaUtil.encrypt(option, userMap.get(recipient).getPublicKey());
+        SealedObject senderEnc = rsaUtil.encrypt("server", userMap.get(recipient).getPublicKey());
+        SealedObject recipientEnc = rsaUtil.encrypt(recipient, userMap.get(recipient).getPublicKey());
 
-        }
+        return new Command(commandEnc,optionEnc,senderEnc,recipientEnc);
     }
 
+    //returns the username list
     public ArrayList<String> getUserNameList(){
         return userNameList;
     }

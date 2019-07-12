@@ -31,7 +31,7 @@ public class ClientMessageSender implements Runnable{
                         client.sendPrivateMessage(message,receiver);
                     }
                     else if(message.substring(0,1).equals("$") && message.length() >1 && !message.contains(" ")){
-                        client.sendServerCommand(message.substring(1));
+                        client.sendServerCommand(message.substring(1),"none");
                     }
                     else{
                         client.sendPublicMessage(message);

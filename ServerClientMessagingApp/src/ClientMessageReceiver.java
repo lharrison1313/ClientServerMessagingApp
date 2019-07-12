@@ -4,9 +4,11 @@ import java.security.PublicKey;
 public class ClientMessageReceiver implements Runnable {
 
     public Client client;
+    public RSA rsaUtil;
 
     public ClientMessageReceiver(Client client){
         this.client = client;
+        rsaUtil = client.getRsaUtil();
     }
 
     @Override
@@ -15,21 +17,25 @@ public class ClientMessageReceiver implements Runnable {
             while(client.isOnline()){
                 try{
 
-                    Object item = client.getMessage();
+                    Object item = client.getObject();
 
-                    if(item instanceof SealedObject){
-
-                        client.printDecMessage((SealedObject) item);
+                    if(item instanceof Message){
+                       client.decryptMessage((Message) item);
                     }
-                    else{
-                        Object[] items = (Object[]) item;
-                        String command = (String) items[0];
-                        if(command.equals("keyadd")){
-                            client.addKey((String) items[1],(PublicKey)items[2]);
+                    else if(item instanceof User){
+                        client.addUser((User) item);
+                    }
+                    else if(item instanceof Command){
+                        Command c = (Command) item;
+                        String command = rsaUtil.decrypt(c.getCommand());
+                        String option = rsaUtil.decrypt(c.getOption());
+                        switch(command){
+                            case "removeuser":
+                                client.removeUser(option);
+                                break;
+                            default:
                         }
-                        else if(command.equals("keyremove")){
-                            client.removeKey((String)items[1]);
-                        }
+
                     }
                 }
                 catch(Exception e){

@@ -15,7 +15,7 @@ public class Client {
     private boolean online;
     private Thread cms;
     private Thread cmr;
-    private Map<String, PublicKey> userPublicKeyList;
+    private Map<String, User> userMap;
     private ArrayList<String> userNameList;
     private RSA rsaUtil;
 
@@ -30,7 +30,7 @@ public class Client {
         output = new ObjectOutputStream(s.getOutputStream());
 
         //initializing public key hash map and rsa utility
-        userPublicKeyList = new HashMap<String,PublicKey>();
+        userMap = new HashMap<>();
         userNameList = new ArrayList<String>();
 
         try{
@@ -55,9 +55,10 @@ public class Client {
         }while(!usernameSuccess.equals("true"));
 
         //setting public key for self and sending public key to server
-        userPublicKeyList.put(this.userName,rsaUtil.getPublicKey());
+        User u = new User(userName,rsaUtil.getPublicKey());
         userNameList.add(userName);
-        output.writeObject(rsaUtil.getPublicKey());
+        userMap.put(userName,u);
+        output.writeObject(u);
 
 
 
@@ -77,73 +78,72 @@ public class Client {
 
     }
 
-
-    public void sendPrivateMessage(String message, String userName) throws Exception{
-        SealedObject[] items = new SealedObject[2];
-        if(!userName.equals("Server") && userNameList.contains(userName)){
-            items[0] = rsaUtil.encrypt(userName,userPublicKeyList.get("Server"));
-            items[1] = rsaUtil.encrypt("~" + this.userName + ": " +message,userPublicKeyList.get(userName));
-            System.out.println("~" + this.userName + ": " +message);
-            output.writeObject(items);
-        }
-        else{
-            System.out.println("user "+ userName + " does not exist");
-        }
-
-    }
-
     public void sendPublicMessage(String message) throws Exception{
-        for(int x = 0; x < userNameList.size(); x++){
-            SealedObject[] items = new SealedObject[2];
-            String userName = userNameList.get(x);
-            if(!userName.equals("Server")){
-                items[0] = rsaUtil.encrypt(userName,userPublicKeyList.get("Server"));
-                items[1] = rsaUtil.encrypt(this.userName+ ": " + message,userPublicKeyList.get(userName));
-                output.writeObject(items);
-            }
+        for(int x = 0; x<userNameList.size();x++){
+            Message m = buildEncryptedMessage(message,userNameList.get(x));
+            output.writeObject(m);
         }
     }
+    
+    public void sendPrivateMessage(String message, String recipient) throws Exception{
+        Message m = buildEncryptedMessage("~ " + message,recipient);
+        output.writeObject(m);
+    }
 
-    public void sendServerCommand(String command) throws Exception{
-        switch (command){
+    public void decryptMessage(Message m) throws Exception{
+        System.out.println(rsaUtil.decrypt(m.getSender()) + ": " + rsaUtil.decrypt(m.getMessage()));
+    }
+
+    public void sendServerCommand(String command, String option)throws Exception{
+        Command c = buildEncryptedCommand(command, option);
+        switch(command){
             case "quit":
-                SealedObject[] items = new SealedObject[2];
-                items[0] = rsaUtil.encrypt("Server",userPublicKeyList.get("Server"));
-                items[1] = rsaUtil.encrypt(command,userPublicKeyList.get("Server"));
-                output.writeObject(items);
+                output.writeObject(c);
                 closeConnection();
                 break;
             case "users":
                 for(int x = 0; x < userNameList.size(); x++){
-                    if(!userNameList.get(x).equals("Server")){
+                    if(userNameList.get(x).equals(userName)){
+                        System.out.println(userNameList.get(x)+" <- you");
+                    }
+                    else if(!userNameList.get(x).equals("Server")){
                         System.out.println(userNameList.get(x));
                     }
                 }
                 break;
             case "help":
-                System.out.println("Command List:\n$quit: closes server connection\n$users: displays all online users\n@[username]: sends private message to a user");
                 break;
             default:
-                System.out.println("Command not recognized");
+                System.out.println("command not recognized");
                 break;
 
         }
 
-        if(command.equals("quit")){
-
-        }
-
     }
 
-    public Object getMessage() throws Exception{
-        Object item = input.readObject();
-        return item;
+    public Object getObject() throws Exception{
+        return input.readObject();
+    }
+    
+    public Message buildEncryptedMessage(String message, String recipient) throws Exception{
+        //creating encrypted message objects
+        SealedObject messageEnc = rsaUtil.encrypt(message,userMap.get(recipient).getPublicKey());
+        SealedObject senderEnc = rsaUtil.encrypt(userName, userMap.get(recipient).getPublicKey());
+        SealedObject recipientEnc = rsaUtil.encrypt(recipient, userMap.get("Server").getPublicKey());
+        
+        return new Message(messageEnc,senderEnc,recipientEnc);
     }
 
-    public void printDecMessage(SealedObject message) throws Exception{
-        System.out.println(rsaUtil.decrypt(message));
-    }
+    public Command buildEncryptedCommand(String command,String option) throws Exception{
 
+        SealedObject commandEnc = rsaUtil.encrypt(command,userMap.get("Server").getPublicKey());
+        SealedObject senderEnc = rsaUtil.encrypt(userName, userMap.get("Server").getPublicKey());
+        SealedObject optionEnc = rsaUtil.encrypt(option, userMap.get("Server").getPublicKey());
+        SealedObject recipientEnc = rsaUtil.encrypt("Server", userMap.get("Server").getPublicKey());
+
+        return new Command(commandEnc,optionEnc,senderEnc,recipientEnc);
+    }
+    
     public void closeConnection() throws IOException{
         s.close();
         online = false;
@@ -153,17 +153,18 @@ public class Client {
         return online;
     }
 
-    public void addKey(String name, PublicKey publicKey){
-        if(!userNameList.contains(name)) {
-            userNameList.add(name);
-            userPublicKeyList.put(name, publicKey);
+    public void addUser(User u){
+        if(!userNameList.contains(u.getUserName())) {
+            userNameList.add(u.getUserName());
+            userMap.put(u.getUserName(),u);
         }
     }
-
-    public void removeKey(String name){
+    public RSA getRsaUtil(){
+        return rsaUtil;
+    }
+    public void removeUser(String name){
         userNameList.remove(name);
-        userPublicKeyList.remove(name);
-        System.out.println("key deleted");
+        userMap.remove(name);
     }
 
     public static void main(String[] args){

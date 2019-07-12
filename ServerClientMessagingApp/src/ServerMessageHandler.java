@@ -1,4 +1,3 @@
-import javax.crypto.SealedObject;
 import java.util.ArrayList;
 
 public class ServerMessageHandler implements  Runnable{
@@ -16,41 +15,37 @@ public class ServerMessageHandler implements  Runnable{
 
     }
 
-    private String[] messageParser(String message,String regex,int limit){
-        return message.split(regex,limit);
-    }
-
     @Override
     public void run() {
         if(server != null){
 
-            Object[] items;
-            String command;
-            String option;
-            String receiver;
-            SealedObject message;
+            Object item;
             System.out.println("user " + senderName + " message handler is running");
 
             while(server.isUserOnline(senderName)){
                 try{
+                     item = server.getObject(senderName);
 
-                    items = server.getMessage(senderName);
-                    receiver = rsaUtil.decrypt((SealedObject) items[0]);
-                    if(receiver.equals("Server")){
-                        command = rsaUtil.decrypt((SealedObject)items[1]);
+                     //if the object is a message relay the message to the recipient
+                     if(item instanceof Message){
+                         server.relayMessage((Message) item);
+                     }
+                     //if the object is a command execute the command
+                     else{
+                        //getting command object and decrypting command and option string;
+                        Command c = (Command) item;
+                        String command = rsaUtil.decrypt(c.getCommand());
+                        String option = rsaUtil.decrypt(c.getOption());
+
+                        //new server commands can be added below to switch statement
                         switch (command){
-                            case("quit"):
+                            case "quit":
                                 server.removeUser(senderName);
                                 break;
+                            default:
+                                System.out.println("user " + senderName + "requested unknown command " + command);
                         }
-                    }
-                    else{
-                        message = (SealedObject)items[1];
-                        server.sendMessage(receiver,message);
-                    }
-
-
-
+                     }
                 }
                catch(Exception e){
                     System.out.println(e);
