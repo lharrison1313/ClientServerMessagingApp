@@ -1,4 +1,3 @@
-
 import java.io.IOException;
 import java.security.KeyPairGenerator;
 import java.security.*;
@@ -40,12 +39,14 @@ public class RSA {
         return (String)  cipherText.getObject(cipher);
     }
 
+    //hashes a string
     private byte[] hashString(String message) throws NoSuchAlgorithmException{
         MessageDigest digest = MessageDigest.getInstance("SHA-256");
         return digest.digest(message.getBytes());
     }
 
-    public SealedObject hashEncrypt(String message) throws InvalidKeyException, NoSuchAlgorithmException, NoSuchPaddingException, IllegalBlockSizeException, IOException{
+    //hashes a string and encrypts the byte array object with senders private key
+    public SealedObject sign(String message) throws InvalidKeyException, NoSuchAlgorithmException, NoSuchPaddingException, IllegalBlockSizeException, IOException{
         Cipher cipher = Cipher.getInstance("RSA/ECB/PKCS1Padding");
         cipher.init(Cipher.ENCRYPT_MODE,privateKey);
         byte[] messageHash = hashString(message);
@@ -53,13 +54,15 @@ public class RSA {
 
     }
 
+    //decrypts a Sealed byte array with senders public key
     private byte[] hashDecrypt(SealedObject hash, PublicKey sendersPublicKey) throws InvalidKeyException, NoSuchAlgorithmException, NoSuchPaddingException, IllegalBlockSizeException, IOException, ClassNotFoundException, BadPaddingException{
         Cipher cipher = Cipher.getInstance("RSA/ECB/PKCS1Padding");
         cipher.init(Cipher.DECRYPT_MODE,sendersPublicKey);
         return (byte[]) hash.getObject(cipher);
     }
 
-    public boolean compareHash(SealedObject message, SealedObject hash, PublicKey sendersPublicKey) throws InvalidKeyException, NoSuchAlgorithmException, NoSuchPaddingException, IllegalBlockSizeException, IOException, ClassNotFoundException, BadPaddingException{
+    //compares the hash received with a hash of the received message message
+    public boolean verifySignature(SealedObject message, SealedObject hash, PublicKey sendersPublicKey) throws InvalidKeyException, NoSuchAlgorithmException, NoSuchPaddingException, IllegalBlockSizeException, IOException, ClassNotFoundException, BadPaddingException{
         String messageDec = decrypt(message);
         byte[] hashDec =  hashDecrypt(hash,sendersPublicKey);
         return Arrays.equals(hashDec,hashString(messageDec));

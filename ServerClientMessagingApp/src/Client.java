@@ -2,7 +2,6 @@ import javax.crypto.SealedObject;
 import java.io.IOException;
 import java.net.*;
 import java.io.*;
-import java.security.PublicKey;
 import java.util.*;
 
 public class Client {
@@ -62,9 +61,9 @@ public class Client {
 
 
 
-        //displays response from server
-        //getMessage();
+        //displays startup info
         System.out.println("type $help for list of commands and features");
+        System.out.println("type to send message or use @user to pm someone");
 
         //initializing message handler threads
         cms = new Thread(new ClientMessageSender(this));
@@ -74,6 +73,25 @@ public class Client {
         cms.start();
         cmr.start();
 
+
+
+    }
+
+    public void processCommand(Command c) throws Exception{
+        String command = rsaUtil.decrypt(c.getCommand());
+        String option = rsaUtil.decrypt(c.getOption());
+        if(getRsaUtil().verifySignature(c.getCommand(),c.getSignature(),userMap.get("Server").getPublicKey())){
+            switch (command) {
+                case "removeuser":
+                    removeUser(option);
+                    break;
+                default:
+                    System.out.println("Command Error: Server attempted unrecognized command");
+            }
+        }
+        else{
+            System.out.println("Command Validation Error: command signature failed");
+        }
 
 
     }
@@ -91,7 +109,13 @@ public class Client {
     }
 
     public void decryptMessage(Message m) throws Exception{
-        System.out.println(rsaUtil.decrypt(m.getSender()) + ": " + rsaUtil.decrypt(m.getMessage()));
+        String sender = rsaUtil.decrypt(m.getSender());
+        if(rsaUtil.verifySignature(m.getMessage(),m.getSignature(),userMap.get(sender).getPublicKey())){
+            System.out.println(rsaUtil.decrypt(m.getSender()) + ": " + rsaUtil.decrypt(m.getMessage()));
+        }
+        else{
+            System.out.println("Message Validation Error: message signature failed");
+        }
     }
 
     public void sendServerCommand(String command, String option)throws Exception{
@@ -128,25 +152,27 @@ public class Client {
     public Message buildEncryptedMessage(String message, String recipient) throws Exception{
         //creating encrypted message objects
         SealedObject messageEnc = rsaUtil.encrypt(message,userMap.get(recipient).getPublicKey());
+        SealedObject signature = rsaUtil.sign(message);
         SealedObject senderEnc = rsaUtil.encrypt(userName, userMap.get(recipient).getPublicKey());
         SealedObject recipientEnc = rsaUtil.encrypt(recipient, userMap.get("Server").getPublicKey());
         
-        return new Message(messageEnc,senderEnc,recipientEnc);
+        return new Message(messageEnc,senderEnc,recipientEnc,signature);
     }
 
     public Command buildEncryptedCommand(String command,String option) throws Exception{
 
         SealedObject commandEnc = rsaUtil.encrypt(command,userMap.get("Server").getPublicKey());
+        SealedObject signature = rsaUtil.sign(command);
         SealedObject senderEnc = rsaUtil.encrypt(userName, userMap.get("Server").getPublicKey());
         SealedObject optionEnc = rsaUtil.encrypt(option, userMap.get("Server").getPublicKey());
         SealedObject recipientEnc = rsaUtil.encrypt("Server", userMap.get("Server").getPublicKey());
 
-        return new Command(commandEnc,optionEnc,senderEnc,recipientEnc);
+        return new Command(commandEnc,signature,optionEnc,senderEnc,recipientEnc);
     }
     
     public void closeConnection() throws IOException{
-        s.close();
         online = false;
+        s.close();
     }
 
     public boolean isOnline(){

@@ -31,21 +31,10 @@ public class ServerMessageHandler implements  Runnable{
                          server.relayMessage((Message) item);
                      }
                      //if the object is a command execute the command
-                     else{
-                        //getting command object and decrypting command and option string;
-                        Command c = (Command) item;
-                        String command = rsaUtil.decrypt(c.getCommand());
-                        String option = rsaUtil.decrypt(c.getOption());
-
-                        //new server commands can be added below to switch statement
-                        switch (command){
-                            case "quit":
-                                server.removeUser(senderName);
-                                break;
-                            default:
-                                System.out.println("user " + senderName + "requested unknown command " + command);
-                        }
+                     else if(item instanceof  Command){
+                         server.commandProcessor((Command) item, senderName);
                      }
+
                 }
                catch(Exception e){
                     System.out.println(e);

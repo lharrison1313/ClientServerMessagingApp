@@ -1,4 +1,3 @@
-import java.io.IOException;
 import java.util.Scanner;
 
 public class ClientMessageSender implements Runnable{
@@ -13,33 +12,32 @@ public class ClientMessageSender implements Runnable{
 
     @Override
     public void run() {
-        System.out.println("type to send message or use @user to pm someone");
         if(client != null){
 
             //runs while the client is connected to the server
-            String message;
+            String userInput;
             while(client.isOnline()){
                 try{
                     //gets input from user and checks for quit command
-                    message = scan.nextLine();
-                    if(message.substring(0,1).equals("@") && message.length() >1 && message.contains(" ")){
-                        String[] messageList = message.split(" ", 2);
+                    userInput = scan.nextLine();
+                    if(userInput.substring(0,1).equals("@") && userInput.length() >1 && userInput.contains(" ")){
+                        String[] messageList = userInput.split(" ", 2);
 
                         String receiver = messageList[0].substring(1);
-                        message = messageList[1];
+                        userInput = messageList[1];
 
-                        client.sendPrivateMessage(message,receiver);
+                        client.sendPrivateMessage(userInput,receiver);
                     }
-                    else if(message.substring(0,1).equals("$") && message.length() >1 && !message.contains(" ")){
-                        client.sendServerCommand(message.substring(1),"none");
+                    else if(userInput.substring(0,1).equals("$") && userInput.length() >1 && !userInput.contains(" ")){
+                        client.sendServerCommand(userInput.substring(1),"none");
                     }
                     else{
-                        client.sendPublicMessage(message);
+                        client.sendPublicMessage(userInput);
                     }
 
                 }
                 catch (Exception e){
-                    System.out.println(e);
+                    System.out.println("There is a problem in cms " + e);
                 }
 
             }

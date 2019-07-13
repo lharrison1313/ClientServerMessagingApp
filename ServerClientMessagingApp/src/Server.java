@@ -1,7 +1,6 @@
 import javax.crypto.SealedObject;
 import java.net.*;
 import java.io.*;
-import java.security.PublicKey;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.Map;
@@ -81,14 +80,15 @@ public class Server  {
             messageHandler = new Thread(new ServerMessageHandler(this,userName,rsaUtil));
             messageHandler.start();
 
-            //displaying newly added user
-            System.out.println("user " + userName + " has been added to the server");
-            //relayMessage(rsaUtil.encrypt("welcome to the server " + userName, userPublicKeyList.get(userName)), userName);
-            sendMessageAll(userName + " has joined the server");
-
             //Sends keys to all users
             sendUsers(userName);
             sendServerUser(userName);
+
+            //displaying newly added user
+            System.out.println("user " + userName + " has been added to the server");
+            sendMessageAll(userName + " has joined the server");
+
+            sendMessage("welcome to the server " + userName, userName);
         }
 
     }
@@ -111,6 +111,26 @@ public class Server  {
         }
         sendCommandAll("removeuser",userName);
         sendMessageAll(userName + " has Left");
+    }
+
+    public void commandProcessor(Command c, String senderName) throws Exception{
+        String command = rsaUtil.decrypt(c.getCommand());
+        String option = rsaUtil.decrypt(c.getOption());
+
+        //new server commands can be added below to switch statement
+        if(rsaUtil.verifySignature(c.getCommand(),c.getSignature(),userMap.get(senderName).getPublicKey())){
+            switch (command){
+                case "quit":
+                    removeUser(senderName);
+                    break;
+                default:
+                    System.out.println("user " + senderName + "requested unknown command " + command);
+            }
+        }
+        else{
+            System.out.println("Command Validation Error: command signature failed");
+        }
+
     }
 
     //checks if the user is currently online
@@ -173,20 +193,22 @@ public class Server  {
     public Message buildEncryptedMessage(String message, String recipient) throws Exception{
         //creating encrypted message objects
         SealedObject messageEnc = rsaUtil.encrypt(message,userMap.get(recipient).getPublicKey());
+        SealedObject signature = rsaUtil.sign(message);
         SealedObject senderEnc = rsaUtil.encrypt("Server", userMap.get(recipient).getPublicKey());
         SealedObject recipientEnc = rsaUtil.encrypt(recipient, userMap.get(recipient).getPublicKey());
 
-        return new Message(messageEnc,senderEnc,recipientEnc);
+        return new Message(messageEnc,senderEnc,recipientEnc,signature);
     }
 
     //builds an encrypted command object given the command an option and a recipient
     public Command buildEncryptedCommand(String command, String option, String recipient) throws Exception{
         SealedObject commandEnc = rsaUtil.encrypt(command,userMap.get(recipient).getPublicKey());
+        SealedObject signature = rsaUtil.sign(command);
         SealedObject optionEnc = rsaUtil.encrypt(option, userMap.get(recipient).getPublicKey());
         SealedObject senderEnc = rsaUtil.encrypt("server", userMap.get(recipient).getPublicKey());
         SealedObject recipientEnc = rsaUtil.encrypt(recipient, userMap.get(recipient).getPublicKey());
 
-        return new Command(commandEnc,optionEnc,senderEnc,recipientEnc);
+        return new Command(commandEnc,signature,optionEnc,senderEnc,recipientEnc);
     }
 
     //returns the username list
