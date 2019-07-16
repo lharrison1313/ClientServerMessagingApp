@@ -110,7 +110,7 @@ public class Server  {
             }
         }
         sendCommandAll("removeuser",userName);
-        sendMessageAll(userName + " has Left");
+        sendMessageAll(userName + " has left");
     }
 
     public void commandProcessor(Command c, String senderName) throws Exception{

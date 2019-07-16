@@ -1,4 +1,7 @@
 import javax.crypto.SealedObject;
+import javax.swing.*;
+import java.awt.event.ActionEvent;
+import java.awt.event.ActionListener;
 import java.io.IOException;
 import java.net.*;
 import java.io.*;
@@ -12,11 +15,11 @@ public class Client {
     private ObjectOutputStream output;
     private String userName;
     private boolean online;
-    private Thread cms;
     private Thread cmr;
     private Map<String, User> userMap;
     private ArrayList<String> userNameList;
     private RSA rsaUtil;
+    private MessagingGUI messagingWindow;
 
     public Client(String host, int port) throws Exception {
 
@@ -35,23 +38,24 @@ public class Client {
         try{
             rsaUtil = new RSA();
         }
-        catch(Exception e){
-            System.out.println(e);
+        catch(Exception e1){
+            System.out.println(e1);
         }
 
         //sends server username information and checks to see if username is taken
         String usernameSuccess;
-        Scanner scan = new Scanner(System.in);
 
         do{
-            System.out.println("please enter your username");
-            this.userName = scan.nextLine();
+            this.userName = JOptionPane.showInputDialog("please enter your username");
             output.writeObject(this.userName);
             usernameSuccess = (String) input.readObject();
             if(!usernameSuccess.equals("true")){
-                System.out.println("username is taken or invalid please choose another");
+                JOptionPane.showMessageDialog(null,"username is taken or invalid please choose another");
             }
         }while(!usernameSuccess.equals("true"));
+
+        //setting up gui
+        messagingWindow = new MessagingGUI();
 
         //setting public key for self and sending public key to server
         User u = new User(userName,rsaUtil.getPublicKey());
@@ -62,19 +66,63 @@ public class Client {
 
 
         //displays startup info
-        System.out.println("type $help for list of commands and features");
-        System.out.println("type to send message or use @user to pm someone");
+        messagingWindow.appendTextArea("type $help for list of commands and features");
+        messagingWindow.appendTextArea("type to send message or use @user to pm someone");
 
         //initializing message handler threads
-        cms = new Thread(new ClientMessageSender(this));
+
         cmr = new Thread(new ClientMessageReceiver(this));
 
         //starting message handler threads
-        cms.start();
+        createClientMessageSender();
         cmr.start();
+        createCloseActionListener();
 
+    }
 
+    public void createCloseActionListener(){
+        messagingWindow.getFrame().addWindowListener(new java.awt.event.WindowAdapter() {
+            @Override
+            public void windowClosing(java.awt.event.WindowEvent e) {
+                try{
+                    sendServerCommand("quit","none");
+                }
+                catch (Exception e1){
+                    System.out.println("error sending server quit command");
+                }
+                e.getWindow().dispose();
+            }
+        });
+    }
 
+    public void createClientMessageSender() throws Exception{
+        messagingWindow.getButton().addActionListener(new ActionListener() {
+            public void actionPerformed(ActionEvent e) {
+
+                try{
+                    //gets input from user and checks for quit command
+                    String userInput = messagingWindow.getTextField().getText();
+                    messagingWindow.getTextField().setText("");
+                    if(userInput.substring(0,1).equals("@") && userInput.length() >1 && userInput.contains(" ")){
+                        String[] messageList = userInput.split(" ", 2);
+
+                        String receiver = messageList[0].substring(1);
+                        userInput = messageList[1];
+                        sendPrivateMessage(userInput,receiver);
+                    }
+                    else if(userInput.substring(0,1).equals("$") && userInput.length() >1 && !userInput.contains(" ")){
+                        sendServerCommand(userInput.substring(1),"none");
+                    }
+                    else{
+                        sendPublicMessage(userInput);
+                    }
+
+                }
+                catch (Exception e2){
+                    System.out.println("Client Message Sender Error: " + e2);
+                }
+            }
+        });
     }
 
     public void processCommand(Command c) throws Exception{
@@ -98,20 +146,27 @@ public class Client {
 
     public void sendPublicMessage(String message) throws Exception{
         for(int x = 0; x<userNameList.size();x++){
-            Message m = buildEncryptedMessage(message,userNameList.get(x));
-            output.writeObject(m);
+            if(!userNameList.get(x).equals("Server")) {
+                Message m = buildEncryptedMessage(message, userNameList.get(x));
+                output.writeObject(m);
+            }
         }
     }
     
     public void sendPrivateMessage(String message, String recipient) throws Exception{
         Message m = buildEncryptedMessage("~ " + message,recipient);
         output.writeObject(m);
+        if(!recipient.equals(userName)){
+            messagingWindow.appendTextArea(userName + ": ~ " + message);
+        }
     }
 
     public void decryptMessage(Message m) throws Exception{
         String sender = rsaUtil.decrypt(m.getSender());
-        if(rsaUtil.verifySignature(m.getMessage(),m.getSignature(),userMap.get(sender).getPublicKey())){
-            System.out.println(rsaUtil.decrypt(m.getSender()) + ": " + rsaUtil.decrypt(m.getMessage()));
+        String message = rsaUtil.decrypt(m.getMessage());
+        if(rsaUtil.verifySignature(m.getMessage(),m.getSignature(),userMap.get(sender).getPublicKey() )){
+                messagingWindow.appendTextArea(sender + ": " + message);
+
         }
         else{
             System.out.println("Message Validation Error: message signature failed");
@@ -128,10 +183,10 @@ public class Client {
             case "users":
                 for(int x = 0; x < userNameList.size(); x++){
                     if(userNameList.get(x).equals(userName)){
-                        System.out.println(userNameList.get(x)+" <- you");
+                        messagingWindow.appendTextArea(userNameList.get(x)+" <- you");
                     }
                     else if(!userNameList.get(x).equals("Server")){
-                        System.out.println(userNameList.get(x));
+                        messagingWindow.appendTextArea(userNameList.get(x));
                     }
                 }
                 break;

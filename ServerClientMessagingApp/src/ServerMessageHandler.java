@@ -24,8 +24,8 @@ public class ServerMessageHandler implements  Runnable{
 
             while(server.isUserOnline(senderName)){
                 try{
-                     item = server.getObject(senderName);
 
+                     item = server.getObject(senderName);
                      //if the object is a message relay the message to the recipient
                      if(item instanceof Message){
                          server.relayMessage((Message) item);
