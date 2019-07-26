@@ -4,6 +4,7 @@ import java.io.*;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.Map;
+import java.util.Scanner;
 
 
 public class Server  {
@@ -16,19 +17,23 @@ public class Server  {
     private Map<String, User> userMap;
     private RSA rsaUtil;
     private User serverUser;
+    DatabaseManager dbm;
+
+
 
 
 
     public Server(int port) throws Exception{
 
         //initializing user hash maps
-        users = new HashMap<String,Socket>();
-        userInput = new HashMap<String,ObjectInputStream>();
-        userOutput = new HashMap<String,ObjectOutputStream>();
-        userNameList = new ArrayList<String>();
+        users = new HashMap<>();
+        userInput = new HashMap<>();
+        userOutput = new HashMap<>();
+        userNameList = new ArrayList<>();
         userMap = new HashMap<>();
         rsaUtil = new RSA();
         serverUser = new User("Server",rsaUtil.getPublicKey());
+
 
 
         //declaring socket and stream variables
@@ -41,14 +46,18 @@ public class Server  {
         ss = new ServerSocket(port);
 
         while(true){
+
+            dbm = new DatabaseManager();
+
             s = ss.accept();
+
 
             //creating input and output data streams
             output = new ObjectOutputStream(s.getOutputStream());
             input = new ObjectInputStream(s.getInputStream());
 
             //getting username from client and checking if it already exists
-            boolean usernameSuccess;
+            boolean usernameSuccess = false;
             do{
                 userName = (String) input.readObject();
 
@@ -64,6 +73,7 @@ public class Server  {
                     usernameSuccess = true;
                 }
             }while(!usernameSuccess);
+
             output.writeObject("true");
             userNameList.add(userName);
 

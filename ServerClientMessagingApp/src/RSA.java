@@ -3,6 +3,8 @@ import java.security.KeyPairGenerator;
 import java.security.*;
 import java.util.Arrays;
 import javax.crypto.*;
+import javax.crypto.spec.PBEKeySpec;
+import java.util.Arrays;
 
 public class RSA {
 
@@ -40,9 +42,24 @@ public class RSA {
     }
 
     //hashes a string
-    private byte[] hashString(String message) throws NoSuchAlgorithmException{
+    public byte[] hashString(String message) throws NoSuchAlgorithmException{
         MessageDigest digest = MessageDigest.getInstance("SHA-256");
         return digest.digest(message.getBytes());
+    }
+
+    public static byte[] generateSalt(int size){
+        SecureRandom sr = new SecureRandom();
+        byte[] salt = new byte[size];
+        sr.nextBytes(salt);
+        return salt;
+    }
+
+    public static byte[] hashPassword(String password, byte[] salt, int iterationCount, int keyLength) throws Exception{
+        SecretKeyFactory skf = SecretKeyFactory.getInstance("PBKDF2WithHmacSHA512");
+        PBEKeySpec keySpec = new PBEKeySpec(password.toCharArray(),salt,iterationCount,keyLength);
+        SecretKey skey = skf.generateSecret(keySpec);
+        return skey.getEncoded();
+
     }
 
     //hashes a string and encrypts the byte array object with senders private key
@@ -71,6 +88,5 @@ public class RSA {
     public PublicKey getPublicKey(){
         return publicKey;
     }
-
 
 }

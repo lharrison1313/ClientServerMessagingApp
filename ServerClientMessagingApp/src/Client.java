@@ -2,6 +2,7 @@ import javax.crypto.SealedObject;
 import javax.swing.*;
 import java.awt.event.ActionEvent;
 import java.awt.event.ActionListener;
+import java.awt.event.WindowEvent;
 import java.io.IOException;
 import java.net.*;
 import java.io.*;
@@ -50,7 +51,7 @@ public class Client {
             output.writeObject(this.userName);
             usernameSuccess = (String) input.readObject();
             if(!usernameSuccess.equals("true")){
-                JOptionPane.showMessageDialog(null,"username is taken or invalid please choose another");
+                JOptionPane.showMessageDialog(null,String.format("username %s is taken or invalid please choose another", userName));
             }
         }while(!usernameSuccess.equals("true"));
 
@@ -111,7 +112,12 @@ public class Client {
                         sendPrivateMessage(userInput,receiver);
                     }
                     else if(userInput.substring(0,1).equals("$") && userInput.length() >1 && !userInput.contains(" ")){
-                        sendServerCommand(userInput.substring(1),"none");
+                        if(userInput.substring(1).equals("quit")){
+                            messagingWindow.getFrame().dispatchEvent(new WindowEvent(messagingWindow.getFrame(),WindowEvent.WINDOW_CLOSING));
+                        }
+                        else {
+                            sendServerCommand(userInput.substring(1), "none");
+                        }
                     }
                     else{
                         sendPublicMessage(userInput);
@@ -152,12 +158,12 @@ public class Client {
             }
         }
     }
-    
+
     public void sendPrivateMessage(String message, String recipient) throws Exception{
-        Message m = buildEncryptedMessage("~ " + message,recipient);
+        Message m = buildEncryptedMessage(String.format("~ %s", message),recipient);
         output.writeObject(m);
         if(!recipient.equals(userName)){
-            messagingWindow.appendTextArea(userName + ": ~ " + message);
+            messagingWindow.appendTextArea( String.format("%s: ~ %s",userName, message));
         }
     }
 
@@ -165,7 +171,7 @@ public class Client {
         String sender = rsaUtil.decrypt(m.getSender());
         String message = rsaUtil.decrypt(m.getMessage());
         if(rsaUtil.verifySignature(m.getMessage(),m.getSignature(),userMap.get(sender).getPublicKey() )){
-                messagingWindow.appendTextArea(sender + ": " + message);
+                messagingWindow.appendTextArea(String.format("%s: %s", sender,message));
 
         }
         else{
@@ -181,9 +187,10 @@ public class Client {
                 closeConnection();
                 break;
             case "users":
+                messagingWindow.appendTextArea("Users Currently Online:");
                 for(int x = 0; x < userNameList.size(); x++){
                     if(userNameList.get(x).equals(userName)){
-                        messagingWindow.appendTextArea(userNameList.get(x)+" <- you");
+                        messagingWindow.appendTextArea(String.format("%s <- you", userName));
                     }
                     else if(!userNameList.get(x).equals("Server")){
                         messagingWindow.appendTextArea(userNameList.get(x));
@@ -193,7 +200,7 @@ public class Client {
             case "help":
                 break;
             default:
-                System.out.println("command not recognized");
+                messagingWindow.appendTextArea("command not recognized");
                 break;
 
         }
@@ -243,6 +250,7 @@ public class Client {
     public RSA getRsaUtil(){
         return rsaUtil;
     }
+
     public void removeUser(String name){
         userNameList.remove(name);
         userMap.remove(name);
