@@ -54,9 +54,9 @@ public class RSA {
         return salt;
     }
 
-    public static byte[] hashPassword(String password, byte[] salt, int iterationCount, int keyLength) throws Exception{
+    public static byte[] hashPassword(String password, byte[] salt, int iterationCount) throws Exception{
         SecretKeyFactory skf = SecretKeyFactory.getInstance("PBKDF2WithHmacSHA512");
-        PBEKeySpec keySpec = new PBEKeySpec(password.toCharArray(),salt,iterationCount,keyLength);
+        PBEKeySpec keySpec = new PBEKeySpec(password.toCharArray(),salt,iterationCount,512);
         SecretKey skey = skf.generateSecret(keySpec);
         return skey.getEncoded();
 

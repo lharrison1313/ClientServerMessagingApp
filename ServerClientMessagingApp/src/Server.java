@@ -47,7 +47,7 @@ public class Server  {
 
         while(true){
 
-            dbm = new DatabaseManager();
+            //dbm = new DatabaseManager();
 
             s = ss.accept();
 
@@ -103,8 +103,30 @@ public class Server  {
 
     }
 
+    public void registerServer() throws Exception{
+        Scanner s = new Scanner(System.in);
+        boolean samePassword = false;
+        String password = null;
+        String passwordCheck = null;
+
+        while(!samePassword) {
+            System.out.println("enter server password");
+            password = s.nextLine();
+            System.out.println("reenter Server Password");
+            passwordCheck = s.nextLine();
+            samePassword = password.equals(passwordCheck);
+        }
+
+        byte[] passwordSalt = RSA.generateSalt(32);
+        byte[] passwordHash = RSA.hashPassword(password,passwordSalt,10000);
+    }
+
+    public void signInServer(){
+
+    }
+
     //gets message or command object from a specific senders input stream
-    public Object getObject(String Sender) throws Exception{
+    public Object getObject(String Sender) throws Exception {
         return userInput.get(Sender).readObject();
     }
 
