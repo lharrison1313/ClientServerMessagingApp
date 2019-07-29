@@ -1,5 +1,4 @@
 import javax.crypto.SealedObject;
-import javax.swing.*;
 import java.awt.event.ActionEvent;
 import java.awt.event.ActionListener;
 import java.awt.event.WindowEvent;
@@ -14,6 +13,7 @@ public class Client {
     private Socket s;
     private ObjectInputStream input;
     private ObjectOutputStream output;
+    private String serverName;
     private String userName;
     private boolean online;
     private Thread cmr;
@@ -21,63 +21,102 @@ public class Client {
     private ArrayList<String> userNameList;
     private RSA rsaUtil;
     private MessagingGUI messagingWindow;
+    private String host;
+    private int port;
+
 
     public Client(String host, int port) throws Exception {
+        this.host = host;
+        this.port = port;
+        rsaUtil = new RSA();
+        userMap = new HashMap<>();
+        userNameList = new ArrayList<>();
 
+    }
+
+    public void connectToServer() throws Exception{
+        Scanner scan = new Scanner(System.in);
         online = true;
+        User serverUser;
+        User clientUser;
 
-        //connects client to server and initializes data streams
+
+        //1. connecting to server
         s = new Socket(host,port);
+        System.out.println("1");
 
+        //2. creating input and output data streams
         input = new ObjectInputStream(s.getInputStream());
         output = new ObjectOutputStream(s.getOutputStream());
+        System.out.println("2");
 
-        //initializing public key hash map and rsa utility
-        userMap = new HashMap<>();
-        userNameList = new ArrayList<String>();
+        //3. getting server's user object
+        serverUser = (User) input.readObject();
+        addUser(serverUser);
+        serverName = serverUser.getUserName();
+        System.out.println("3");
 
-        try{
-            rsaUtil = new RSA();
-        }
-        catch(Exception e1){
-            System.out.println(e1);
-        }
+        //4. verify servers access password
+        System.out.println("4");
 
-        //sends server username information and checks to see if username is taken
-        String usernameSuccess;
+        //5. sending clients sign in and register info to server
+        boolean loginSuccess = false;
+        boolean registerNewUser;
+        String response;
+        String password;
 
-        do{
-            this.userName = JOptionPane.showInputDialog("please enter your username");
-            output.writeObject(this.userName);
-            usernameSuccess = (String) input.readObject();
-            if(!usernameSuccess.equals("true")){
-                JOptionPane.showMessageDialog(null,String.format("username %s is taken or invalid please choose another", userName));
+        while(!loginSuccess){
+
+            System.out.println("register or sign in");
+            response = scan.nextLine();
+
+            if(response.equals("register")) {
+                registerNewUser = true;
             }
-        }while(!usernameSuccess.equals("true"));
+            else{
+                registerNewUser = false;
+            }
 
-        //setting up gui
-        messagingWindow = new MessagingGUI();
+            System.out.println("enter username");
+            userName = scan.nextLine();
+            System.out.println("enter password");
+            password = scan.nextLine();
 
-        //setting public key for self and sending public key to server
-        User u = new User(userName,rsaUtil.getPublicKey());
+            output.writeBoolean(registerNewUser);
+            output.writeObject(rsaUtil.encrypt(userName,serverUser.getPublicKey()));
+            output.writeObject(rsaUtil.encrypt(password,serverUser.getPublicKey()));
+
+            response = (String) input.readObject();
+
+            if(response.equals("true")){
+                loginSuccess = true;
+            }
+
+        }
+        System.out.println("5");
+
+        //6. sending clients user info
+        clientUser = new User(userName,rsaUtil.getPublicKey());
         userNameList.add(userName);
-        userMap.put(userName,u);
-        output.writeObject(u);
+        userMap.put(userName,clientUser);
+        output.writeObject(clientUser);
+        System.out.println("6");
 
-
-
-        //displays startup info
+        //7. setting up gui and displaying startup info
+        messagingWindow = new MessagingGUI();
         messagingWindow.appendTextArea("type $help for list of commands and features");
         messagingWindow.appendTextArea("type to send message or use @user to pm someone");
+        System.out.println("7");
 
-        //initializing message handler threads
-
+        //8. setting up client message sender and reciever
         cmr = new Thread(new ClientMessageReceiver(this));
-
-        //starting message handler threads
         createClientMessageSender();
         cmr.start();
         createCloseActionListener();
+        System.out.println("8");
+
+
+
 
     }
 
@@ -134,7 +173,7 @@ public class Client {
     public void processCommand(Command c) throws Exception{
         String command = rsaUtil.decrypt(c.getCommand());
         String option = rsaUtil.decrypt(c.getOption());
-        if(getRsaUtil().verifySignature(c.getCommand(),c.getSignature(),userMap.get("Server").getPublicKey())){
+        if(getRsaUtil().verifySignature(c.getCommand(),c.getSignature(),userMap.get(serverName).getPublicKey())){
             switch (command) {
                 case "removeuser":
                     removeUser(option);
@@ -152,7 +191,7 @@ public class Client {
 
     public void sendPublicMessage(String message) throws Exception{
         for(int x = 0; x<userNameList.size();x++){
-            if(!userNameList.get(x).equals("Server")) {
+            if(!userNameList.get(x).equals(serverName)) {
                 Message m = buildEncryptedMessage(message, userNameList.get(x));
                 output.writeObject(m);
             }
@@ -192,7 +231,7 @@ public class Client {
                     if(userNameList.get(x).equals(userName)){
                         messagingWindow.appendTextArea(String.format("%s <- you", userName));
                     }
-                    else if(!userNameList.get(x).equals("Server")){
+                    else if(!userNameList.get(x).equals(serverName)){
                         messagingWindow.appendTextArea(userNameList.get(x));
                     }
                 }
@@ -216,18 +255,18 @@ public class Client {
         SealedObject messageEnc = rsaUtil.encrypt(message,userMap.get(recipient).getPublicKey());
         SealedObject signature = rsaUtil.sign(message);
         SealedObject senderEnc = rsaUtil.encrypt(userName, userMap.get(recipient).getPublicKey());
-        SealedObject recipientEnc = rsaUtil.encrypt(recipient, userMap.get("Server").getPublicKey());
+        SealedObject recipientEnc = rsaUtil.encrypt(recipient, userMap.get(serverName).getPublicKey());
         
         return new Message(messageEnc,senderEnc,recipientEnc,signature);
     }
 
     public Command buildEncryptedCommand(String command,String option) throws Exception{
 
-        SealedObject commandEnc = rsaUtil.encrypt(command,userMap.get("Server").getPublicKey());
+        SealedObject commandEnc = rsaUtil.encrypt(command,userMap.get(serverName).getPublicKey());
         SealedObject signature = rsaUtil.sign(command);
-        SealedObject senderEnc = rsaUtil.encrypt(userName, userMap.get("Server").getPublicKey());
-        SealedObject optionEnc = rsaUtil.encrypt(option, userMap.get("Server").getPublicKey());
-        SealedObject recipientEnc = rsaUtil.encrypt("Server", userMap.get("Server").getPublicKey());
+        SealedObject senderEnc = rsaUtil.encrypt(userName, userMap.get(serverName).getPublicKey());
+        SealedObject optionEnc = rsaUtil.encrypt(option, userMap.get(serverName).getPublicKey());
+        SealedObject recipientEnc = rsaUtil.encrypt(serverName, userMap.get(serverName).getPublicKey());
 
         return new Command(commandEnc,signature,optionEnc,senderEnc,recipientEnc);
     }
@@ -259,6 +298,7 @@ public class Client {
     public static void main(String[] args){
         try {
             Client c = new Client("localhost",5051);
+            c.connectToServer();
         }
         catch(Exception e){
             System.out.println(e);

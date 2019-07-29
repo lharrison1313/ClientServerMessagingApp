@@ -275,17 +275,4 @@ public class DatabaseManager {
     public void closeDatabaseConnection()throws Exception{
         conn.close();
     }
-
-    public static void main(String[] args){
-        try{
-
-        }
-        catch (Exception e){
-            System.out.println(e);
-        }
-
-
-    }
-
-
 }

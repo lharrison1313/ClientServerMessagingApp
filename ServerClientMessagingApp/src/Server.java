@@ -10,119 +10,167 @@ import java.util.Scanner;
 public class Server  {
 
     //hash maps which hold user sockets and stream information
-    private Map<String, Socket> users;
+    private Map<String, Socket> userSockets;
     private Map<String, ObjectInputStream> userInput;
     private Map<String, ObjectOutputStream> userOutput;
     private ArrayList<String> userNameList;
     private Map<String, User> userMap;
     private RSA rsaUtil;
     private User serverUser;
-    DatabaseManager dbm;
-
-
-
-
+    private DatabaseManager dbm;
+    private ServerSocket ss;
 
     public Server(int port) throws Exception{
 
         //initializing user hash maps
-        users = new HashMap<>();
+        userSockets = new HashMap<>();
         userInput = new HashMap<>();
         userOutput = new HashMap<>();
         userNameList = new ArrayList<>();
         userMap = new HashMap<>();
         rsaUtil = new RSA();
-        serverUser = new User("Server",rsaUtil.getPublicKey());
+        ss = new ServerSocket(port);
+
+    }
+
+    public void initializeServer() throws Exception{
+        Scanner scan = new Scanner(System.in);
+        String response1;
+        String response2;
+        String servername;
+        String password;
+        byte[] salt;
+        byte[] hash;
 
 
+        System.out.println("build new Database");
+        response1 = scan.nextLine();
+        System.out.println("register a new server or sign in to existing server");
+        response2 = scan.nextLine();
+        System.out.println("enter server name");
+        servername = scan.nextLine();
+        System.out.println("enter password");
+        password = scan.nextLine();
+        if(response2.equals("register") && response1.equals("yes")){
+            salt = RSA.generateSalt(32);
+            hash = RSA.hashPassword(password,salt,100000);
+            dbm = new DatabaseManager(servername,hash,salt,true);
+        }
+        else if(response2.equals("register")){
+            salt = RSA.generateSalt(32);
+            hash = RSA.hashPassword(password,salt,100000);
+            dbm = new DatabaseManager(servername,hash,salt,false);
+        }
+        else{
+            dbm = new DatabaseManager(servername);
+            salt = dbm.getUserSalt(servername,true);
+            hash = RSA.hashPassword(password,salt,100000);
+            System.out.println(dbm.verifyPasswordHash(servername,hash,true));
+        }
 
-        //declaring socket and stream variables
-        ServerSocket ss;
-        Socket s;
+        serverUser = new User(servername,rsaUtil.getPublicKey());
+
+    }
+
+    public void acceptUser(Socket s) throws Exception{
         ObjectInputStream input;
         ObjectOutputStream output;
         String userName;
+        String password;
+        byte[] passwordHash;
+        byte[] salt;
         Thread messageHandler;
-        ss = new ServerSocket(port);
+        User tempUser;
+
+
+        //1. acceptingClient
+        System.out.println("1");
+
+        //2. creating input and output data streams
+        output = new ObjectOutputStream(s.getOutputStream());
+        input = new ObjectInputStream(s.getInputStream());
+        System.out.println("2");
+
+        //3. sending server's public key
+        output.writeObject(serverUser);
+        System.out.println("3");
+
+        //4. verify sever access password
+        System.out.println("4");
+
+        //5. getting register or sign in info from client
+        boolean loginSuccess = false;
+        boolean registerNewUser;
+
+        while(!loginSuccess){
+            registerNewUser = input.readBoolean();
+            userName = rsaUtil.decrypt((SealedObject) input.readObject());
+            password = rsaUtil.decrypt((SealedObject) input.readObject());
+
+            if(isUserOnline(userName)){
+                loginSuccess = false;
+                System.out.println("user " + userName + " tried to login while still online");
+            }
+            else if(registerNewUser){
+                salt = rsaUtil.generateSalt(32);
+                passwordHash = rsaUtil.hashPassword(password,salt,200000);
+                dbm.addNewUser(userName,passwordHash,salt,1);
+                loginSuccess = true;
+            }
+            else{
+                passwordHash = rsaUtil.hashPassword(password,dbm.getUserSalt(userName,false),200000);
+                loginSuccess = dbm.verifyPasswordHash(userName,passwordHash,false);
+            }
+
+            if(loginSuccess){
+                output.writeObject("true");
+            }
+            else{
+                output.writeObject("false");
+            }
+
+        }
+        System.out.println("5");
+
+        //6. getting clients public key and user info
+        tempUser = (User) input.readObject();
+        userName = tempUser.getUserName();
+        userMap.put(userName, tempUser);
+        userNameList.add(userName);
+        System.out.println("6");
+
+        //7. adding user input and output streams to maps
+        userSockets.put(userName,s);
+        userInput.put(userName,input);
+        userOutput.put(userName,output);
+        System.out.println("7");
+
+        //8. start message handler
+        messageHandler = new Thread(new ServerMessageHandler(this,userName,rsaUtil));
+        messageHandler.start();
+        System.out.println("8");
+
+        //9. sending keys to users
+        sendUsers(userName);
+        System.out.println("9");
+
+        //10.displaying newly added user
+        System.out.println("user " + userName + " has been added to the server");
+        sendMessageAll(userName + " has joined the server");
+
+        sendMessage("welcome to the server " + userName, userName);
+        System.out.println("10");
+    }
+
+    public void startServer() throws Exception{
+        Socket s;
+        Thread ua;
 
         while(true){
-
-            //dbm = new DatabaseManager();
-
             s = ss.accept();
-
-
-            //creating input and output data streams
-            output = new ObjectOutputStream(s.getOutputStream());
-            input = new ObjectInputStream(s.getInputStream());
-
-            //getting username from client and checking if it already exists
-            boolean usernameSuccess = false;
-            do{
-                userName = (String) input.readObject();
-
-                if(userName.isEmpty() || userName.equals(" ") || userName.startsWith(" ") || userName.equals("Server")){
-                    usernameSuccess = false;
-                    output.writeObject("false");
-                }
-                else if(isUserOnline(userName)){
-                    output.writeObject("false");
-                    usernameSuccess = false;
-                }
-                else{
-                    usernameSuccess = true;
-                }
-            }while(!usernameSuccess);
-
-            output.writeObject("true");
-            userNameList.add(userName);
-
-            //getting public key for user
-            userMap.put(userName,(User) input.readObject());
-            System.out.println("got public key");
-
-            //placing user sockets and object streams in hash maps
-            users.put(userName, s);
-            userInput.put(userName, input);
-            userOutput.put(userName, output);
-
-            //creating message handler thread for user
-            messageHandler = new Thread(new ServerMessageHandler(this,userName,rsaUtil));
-            messageHandler.start();
-
-            //Sends keys to all users
-            sendUsers(userName);
-            sendServerUser(userName);
-
-            //displaying newly added user
-            System.out.println("user " + userName + " has been added to the server");
-            sendMessageAll(userName + " has joined the server");
-
-            sendMessage("welcome to the server " + userName, userName);
+            ua = new Thread(new ServerUserAcceptor(this,s));
+            ua.start();
         }
-
-    }
-
-    public void registerServer() throws Exception{
-        Scanner s = new Scanner(System.in);
-        boolean samePassword = false;
-        String password = null;
-        String passwordCheck = null;
-
-        while(!samePassword) {
-            System.out.println("enter server password");
-            password = s.nextLine();
-            System.out.println("reenter Server Password");
-            passwordCheck = s.nextLine();
-            samePassword = password.equals(passwordCheck);
-        }
-
-        byte[] passwordSalt = RSA.generateSalt(32);
-        byte[] passwordHash = RSA.hashPassword(password,passwordSalt,10000);
-    }
-
-    public void signInServer(){
-
     }
 
     //gets message or command object from a specific senders input stream
@@ -130,9 +178,9 @@ public class Server  {
         return userInput.get(Sender).readObject();
     }
 
-    //removes all users references from maps
+    //removes all userSockets references from maps
     public void removeUser(String userName) throws Exception{
-        users.remove(userName);
+        userSockets.remove(userName);
         userInput.remove(userName);
         userOutput.remove(userName);
         userMap.remove(userName);
@@ -226,7 +274,7 @@ public class Server  {
         //creating encrypted message objects
         SealedObject messageEnc = rsaUtil.encrypt(message,userMap.get(recipient).getPublicKey());
         SealedObject signature = rsaUtil.sign(message);
-        SealedObject senderEnc = rsaUtil.encrypt("Server", userMap.get(recipient).getPublicKey());
+        SealedObject senderEnc = rsaUtil.encrypt(serverUser.getUserName(), userMap.get(recipient).getPublicKey());
         SealedObject recipientEnc = rsaUtil.encrypt(recipient, userMap.get(recipient).getPublicKey());
 
         return new Message(messageEnc,senderEnc,recipientEnc,signature);
@@ -237,7 +285,7 @@ public class Server  {
         SealedObject commandEnc = rsaUtil.encrypt(command,userMap.get(recipient).getPublicKey());
         SealedObject signature = rsaUtil.sign(command);
         SealedObject optionEnc = rsaUtil.encrypt(option, userMap.get(recipient).getPublicKey());
-        SealedObject senderEnc = rsaUtil.encrypt("server", userMap.get(recipient).getPublicKey());
+        SealedObject senderEnc = rsaUtil.encrypt(serverUser.getUserName(), userMap.get(recipient).getPublicKey());
         SealedObject recipientEnc = rsaUtil.encrypt(recipient, userMap.get(recipient).getPublicKey());
 
         return new Command(commandEnc,signature,optionEnc,senderEnc,recipientEnc);
@@ -251,6 +299,9 @@ public class Server  {
     public static void main(String[] args){
         try{
             Server serve = new Server(5051);
+            serve.initializeServer();
+            serve.startServer();
+
         }
         catch (Exception e){
             System.out.println(e);
