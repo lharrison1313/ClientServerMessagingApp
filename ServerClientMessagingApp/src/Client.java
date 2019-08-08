@@ -1,7 +1,4 @@
 import javax.crypto.SealedObject;
-import java.awt.event.ActionEvent;
-import java.awt.event.ActionListener;
-import java.awt.event.WindowEvent;
 import java.io.IOException;
 import java.net.*;
 import java.io.*;
@@ -25,21 +22,19 @@ public class Client {
     private int port;
 
 
-    public Client(String host, int port) throws Exception {
+    public Client(String host, int port, boolean registerNewUser) throws Exception {
         this.host = host;
         this.port = port;
         rsaUtil = new RSA();
         userMap = new HashMap<>();
         userNameList = new ArrayList<>();
+        connectToServerP1(registerNewUser);
 
     }
 
-    public void connectToServer() throws Exception{
-        Scanner scan = new Scanner(System.in);
+    public void connectToServerP1(boolean registerNewUser) throws Exception{
         online = true;
         User serverUser;
-        User clientUser;
-
 
         //1. connecting to server
         s = new Socket(host,port);
@@ -60,114 +55,64 @@ public class Client {
         System.out.println("4");
 
         //5. sending clients sign in and register info to server
-        boolean loginSuccess = false;
-        boolean registerNewUser;
-        String response;
-        String password;
 
-        while(!loginSuccess){
+        SignInGUI signIn = new SignInGUI(this,serverUser,output,input,registerNewUser);
 
-            System.out.println("register or sign in");
-            response = scan.nextLine();
 
-            if(response.equals("register")) {
-                registerNewUser = true;
-            }
-            else{
-                registerNewUser = false;
-            }
-
-            System.out.println("enter username");
-            userName = scan.nextLine();
-            System.out.println("enter password");
-            password = scan.nextLine();
-
-            output.writeBoolean(registerNewUser);
-            output.writeObject(rsaUtil.encrypt(userName,serverUser.getPublicKey()));
-            output.writeObject(rsaUtil.encrypt(password,serverUser.getPublicKey()));
-
-            response = (String) input.readObject();
-
-            if(response.equals("true")){
-                loginSuccess = true;
-            }
-
-        }
         System.out.println("5");
 
+    }
+
+    public void connectToServerP2()throws Exception{
         //6. sending clients user info
-        clientUser = new User(userName,rsaUtil.getPublicKey());
+        User clientUser = new User(userName,rsaUtil.getPublicKey());
         userNameList.add(userName);
         userMap.put(userName,clientUser);
         output.writeObject(clientUser);
         System.out.println("6");
 
         //7. setting up gui and displaying startup info
-        messagingWindow = new MessagingGUI();
+        messagingWindow = new MessagingGUI(this);
         messagingWindow.appendTextArea("type $help for list of commands and features");
         messagingWindow.appendTextArea("type to send message or use @user to pm someone");
         System.out.println("7");
 
-        //8. setting up client message sender and reciever
+        //8. setting up client message sender and receiver
         cmr = new Thread(new ClientMessageReceiver(this));
-        createClientMessageSender();
         cmr.start();
-        createCloseActionListener();
         System.out.println("8");
-
-
-
-
     }
 
-    public void createCloseActionListener(){
-        messagingWindow.getFrame().addWindowListener(new java.awt.event.WindowAdapter() {
-            @Override
-            public void windowClosing(java.awt.event.WindowEvent e) {
-                try{
+    public boolean sendMessage(String message){
+        try{
+            if(message.substring(0,1).equals("@") && message.length() >1 && message.contains(" ")){
+                String[] messageList = message.split(" ", 2);
+
+                String receiver = messageList[0].substring(1);
+                message = messageList[1];
+                sendPrivateMessage(message,receiver);
+                return false;
+            }
+            else if(message.substring(0,1).equals("$") && message.length() >1 && !message.contains(" ")){
+                if(message.substring(1).equals("quit")){
                     sendServerCommand("quit","none");
+                    return true;
                 }
-                catch (Exception e1){
-                    System.out.println("error sending server quit command");
-                }
-                e.getWindow().dispose();
-            }
-        });
-    }
-
-    public void createClientMessageSender() throws Exception{
-        messagingWindow.getButton().addActionListener(new ActionListener() {
-            public void actionPerformed(ActionEvent e) {
-
-                try{
-                    //gets input from user and checks for quit command
-                    String userInput = messagingWindow.getTextField().getText();
-                    messagingWindow.getTextField().setText("");
-                    if(userInput.substring(0,1).equals("@") && userInput.length() >1 && userInput.contains(" ")){
-                        String[] messageList = userInput.split(" ", 2);
-
-                        String receiver = messageList[0].substring(1);
-                        userInput = messageList[1];
-                        sendPrivateMessage(userInput,receiver);
-                    }
-                    else if(userInput.substring(0,1).equals("$") && userInput.length() >1 && !userInput.contains(" ")){
-                        if(userInput.substring(1).equals("quit")){
-                            messagingWindow.getFrame().dispatchEvent(new WindowEvent(messagingWindow.getFrame(),WindowEvent.WINDOW_CLOSING));
-                        }
-                        else {
-                            sendServerCommand(userInput.substring(1), "none");
-                        }
-                    }
-                    else{
-                        sendPublicMessage(userInput);
-                    }
-
-                }
-                catch (Exception e2){
-                    System.out.println("Client Message Sender Error: " + e2);
+                else {
+                    sendServerCommand(message.substring(1), "none");
+                    return false;
                 }
             }
-        });
+            else{
+                sendPublicMessage(message);
+                return false;
+            }
+
+        }
+        catch (Exception e){
+            System.out.println("Client Message Sender Error: " + e);
+            return false;
+        }
     }
 
     public void processCommand(Command c) throws Exception{
@@ -286,6 +231,7 @@ public class Client {
             userMap.put(u.getUserName(),u);
         }
     }
+
     public RSA getRsaUtil(){
         return rsaUtil;
     }
@@ -295,17 +241,17 @@ public class Client {
         userMap.remove(name);
     }
 
-    public static void main(String[] args){
+    public void setUserName(String userName){
+        this.userName = userName;
+    }
+
+   /* public static void main(String[] args){
         try {
             Client c = new Client("localhost",5051);
-            c.connectToServer();
         }
         catch(Exception e){
             System.out.println(e);
         }
-
-
-
     }
-
+    */
 }

@@ -104,18 +104,28 @@ public class Server  {
 
         while(!loginSuccess){
             registerNewUser = input.readBoolean();
+            System.out.println(registerNewUser);
             userName = rsaUtil.decrypt((SealedObject) input.readObject());
             password = rsaUtil.decrypt((SealedObject) input.readObject());
+
 
             if(isUserOnline(userName)){
                 loginSuccess = false;
                 System.out.println("user " + userName + " tried to login while still online");
             }
             else if(registerNewUser){
-                salt = rsaUtil.generateSalt(32);
-                passwordHash = rsaUtil.hashPassword(password,salt,200000);
-                dbm.addNewUser(userName,passwordHash,salt,1);
-                loginSuccess = true;
+                if(dbm.doesUserExist(userName)){
+                    loginSuccess = false;
+                }
+                else {
+                    salt = rsaUtil.generateSalt(32);
+                    passwordHash = rsaUtil.hashPassword(password, salt, 200000);
+                    dbm.addNewUser(userName, passwordHash, salt, 1);
+                    loginSuccess = true;
+                }
+            }
+            else if(!dbm.doesUserExist(userName)){
+                loginSuccess = false;
             }
             else{
                 passwordHash = rsaUtil.hashPassword(password,dbm.getUserSalt(userName,false),200000);

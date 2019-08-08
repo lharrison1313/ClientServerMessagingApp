@@ -248,12 +248,12 @@ public class DatabaseManager {
 
         if(doesUserExist(username)||doesServerExist(username)) {
             if (isServer == true) {
-
                 verifyPasswordHashString = "SELECT PasswordHash FROM " + SERVER_TABLE + " WHERE Servername= ?";
 
-            } else {
 
+            } else {
                 verifyPasswordHashString = "SELECT PasswordHash FROM " + userTableName + " WHERE Username= ?";
+
 
             }
 

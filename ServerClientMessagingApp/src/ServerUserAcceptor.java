@@ -14,7 +14,7 @@ public class ServerUserAcceptor implements Runnable {
             server.acceptUser(socket);
         }
         catch (Exception e){
-            System.out.println("problem in server user acceptor");
+            System.out.println(e);
         }
     }
 }

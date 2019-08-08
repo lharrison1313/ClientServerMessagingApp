@@ -1,9 +1,7 @@
 import java.awt.*;
-import javax.swing.JFrame;
-import javax.swing.JTextArea;
-import javax.swing.JTextField;
-import javax.swing.JButton;
-import javax.swing.JScrollPane;
+import java.awt.event.*;
+import javax.swing.*;
+
 
 public class MessagingGUI {
 
@@ -11,11 +9,13 @@ public class MessagingGUI {
         private JTextField textField;
         private JTextArea textArea;
         private JButton btnNewButton;
+        private Client client;
 
-        public MessagingGUI() {
+        public MessagingGUI(Client client) {
             initialize();
             frmMessagingApp.getRootPane().setDefaultButton(btnNewButton);
             frmMessagingApp.setVisible(true);
+            this.client = client;
         }
 
         private void initialize() {
@@ -55,29 +55,40 @@ public class MessagingGUI {
 
             btnNewButton = new JButton("Send");
 
+            btnNewButton.addActionListener(new ActionListener(){
+                public void actionPerformed(ActionEvent e) {
+                    boolean close;
+                    String userInput = textField.getText();
+                    textField.setText("");
+                    close = client.sendMessage(userInput);
+                    if(close == true){
+                        frmMessagingApp.dispatchEvent(new WindowEvent(frmMessagingApp,WindowEvent.WINDOW_CLOSING));
+                    }
+                }
+            });
+
             GridBagConstraints gbc_btnNewButton = new GridBagConstraints();
             gbc_btnNewButton.insets = new Insets(0, 10, 10, 10);
             gbc_btnNewButton.gridx = 1;
             gbc_btnNewButton.gridy = 1;
             frmMessagingApp.getContentPane().add(btnNewButton, gbc_btnNewButton);
-        }
 
-        public JButton getButton() {
-            return btnNewButton;
-        }
-
-        public JTextField getTextField(){
-            return textField;
+            frmMessagingApp.addWindowListener(new java.awt.event.WindowAdapter() {
+                @Override
+                public void windowClosing(java.awt.event.WindowEvent e) {
+                    try{
+                        client.sendServerCommand("quit","none");
+                    }
+                    catch (Exception e1){
+                        System.out.println("error sending server quit command");
+                    }
+                    e.getWindow().dispose();
+                }
+            });
         }
 
         public void appendTextArea(String text){
             textArea.append(text + "\n");
         }
-
-        public Frame getFrame(){
-            return frmMessagingApp;
-        }
-
-
 
 }
