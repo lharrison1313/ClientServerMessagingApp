@@ -17,6 +17,7 @@ public class Server  {
     private Map<String, User> userMap;
     private RSA rsaUtil;
     private User serverUser;
+    private String servername;
     private DatabaseManager dbm;
     private ServerSocket ss;
 
@@ -37,10 +38,10 @@ public class Server  {
         Scanner scan = new Scanner(System.in);
         String response1;
         String response2;
-        String servername;
+        String sap;
         String password;
-        byte[] salt;
-        byte[] hash;
+        byte[] salt1, salt2;
+        byte[] hash1, hash2;
 
 
         System.out.println("build new Database");
@@ -51,21 +52,30 @@ public class Server  {
         servername = scan.nextLine();
         System.out.println("enter password");
         password = scan.nextLine();
+
         if(response2.equals("register") && response1.equals("yes")){
-            salt = RSA.generateSalt(32);
-            hash = RSA.hashPassword(password,salt,100000);
-            dbm = new DatabaseManager(servername,hash,salt,true);
+            System.out.println("enter server access password");
+            sap = scan.nextLine();
+            salt1 = RSA.generateSalt(32);
+            salt2 = RSA.generateSalt(32);
+            hash1 = RSA.hashPassword(password,salt1,100000);
+            hash2 = RSA.hashPassword(sap, salt2, 100000);
+            dbm = new DatabaseManager(servername,hash1,salt1, hash2, salt2,true);
         }
         else if(response2.equals("register")){
-            salt = RSA.generateSalt(32);
-            hash = RSA.hashPassword(password,salt,100000);
-            dbm = new DatabaseManager(servername,hash,salt,false);
+            System.out.println("enter server access password");
+            sap = scan.nextLine();
+            salt1 = RSA.generateSalt(32);
+            salt2 = RSA.generateSalt(32);
+            hash1 = RSA.hashPassword(password,salt1,100000);
+            hash2 = RSA.hashPassword(sap,salt2,100000);
+            dbm = new DatabaseManager(servername,hash1,salt1,hash2,salt2,false);
         }
         else{
             dbm = new DatabaseManager(servername);
-            salt = dbm.getUserSalt(servername,true);
-            hash = RSA.hashPassword(password,salt,100000);
-            System.out.println(dbm.verifyPasswordHash(servername,hash,true));
+            salt1 = dbm.getUserSalt(servername,true);
+            hash1 = RSA.hashPassword(password,salt1,100000);
+            System.out.println(dbm.verifyPasswordHash(servername,hash1,true));
         }
 
         serverUser = new User(servername,rsaUtil.getPublicKey());
@@ -77,8 +87,10 @@ public class Server  {
         ObjectOutputStream output;
         String userName;
         String password;
+        String serverAccessPassword;
         byte[] passwordHash;
         byte[] salt;
+        byte[] ServerAccessPasswordSalt;
         Thread messageHandler;
         User tempUser;
 
@@ -104,40 +116,47 @@ public class Server  {
 
         while(!loginSuccess){
             registerNewUser = input.readBoolean();
-            System.out.println(registerNewUser);
+            serverAccessPassword = rsaUtil.decrypt((SealedObject) input.readObject());
+            ServerAccessPasswordSalt = dbm.getServerAccessSalt(servername);
             userName = rsaUtil.decrypt((SealedObject) input.readObject());
             password = rsaUtil.decrypt((SealedObject) input.readObject());
 
 
-            if(isUserOnline(userName)){
-                loginSuccess = false;
-                System.out.println("user " + userName + " tried to login while still online");
-            }
-            else if(registerNewUser){
-                if(dbm.doesUserExist(userName)){
+            if(dbm.verifyServerAccessPassword(servername,rsaUtil.hashPassword(serverAccessPassword,ServerAccessPasswordSalt,100000))) {
+
+                if (isUserOnline(userName)) {
                     loginSuccess = false;
+                    System.out.println("user " + userName + " tried to login while still online");
+
+                } else if (registerNewUser) {
+
+                    if (dbm.doesUserExist(userName)) {
+                        loginSuccess = false;
+
+                    } else {
+                        salt = rsaUtil.generateSalt(32);
+                        passwordHash = rsaUtil.hashPassword(password, salt, 200000);
+                        dbm.addNewUser(userName, passwordHash, salt, 1);
+                        loginSuccess = true;
+                    }
+
+                } else if (!dbm.doesUserExist(userName)) {
+                    loginSuccess = false;
+
+                } else {
+                    passwordHash = rsaUtil.hashPassword(password, dbm.getUserSalt(userName, false), 200000);
+                    loginSuccess = dbm.verifyPasswordHash(userName, passwordHash, false);
+
                 }
-                else {
-                    salt = rsaUtil.generateSalt(32);
-                    passwordHash = rsaUtil.hashPassword(password, salt, 200000);
-                    dbm.addNewUser(userName, passwordHash, salt, 1);
-                    loginSuccess = true;
-                }
-            }
-            else if(!dbm.doesUserExist(userName)){
-                loginSuccess = false;
-            }
-            else{
-                passwordHash = rsaUtil.hashPassword(password,dbm.getUserSalt(userName,false),200000);
-                loginSuccess = dbm.verifyPasswordHash(userName,passwordHash,false);
             }
 
-            if(loginSuccess){
+            if (loginSuccess) {
                 output.writeObject("true");
-            }
-            else{
+            } else {
                 output.writeObject("false");
             }
+
+
 
         }
         System.out.println("5");

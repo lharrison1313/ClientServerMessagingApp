@@ -3,6 +3,7 @@ import java.net.Socket;
 public class ServerUserAcceptor implements Runnable {
     Server server;
     Socket socket;
+
     ServerUserAcceptor(Server serve, Socket sock){
         server = serve;
         socket = sock;

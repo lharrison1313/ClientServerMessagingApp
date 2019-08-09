@@ -10,18 +10,18 @@ public class DatabaseManager {
     static final String PASS = null;
     static final String SERVER_TABLE = "SERVERS";
 
-    public DatabaseManager(String servername, byte[] passwordHash, byte[] passwordSalt, boolean newDatabase) throws Exception{
+    public DatabaseManager(String servername, byte[] passwordHash, byte[] passwordSalt, byte[] serverAccessPassword, byte[] serverAccessPasswordSalt, boolean newDatabase) throws Exception{
         Class.forName(JDBC_DRIVER);
         if(newDatabase){
             createNewDatabase();
             conn = DriverManager.getConnection(DB_URL, USER, PASS);
             createServerTable();
-            addNewServer(servername, passwordHash,passwordSalt);
+            addNewServer(servername, passwordHash,passwordSalt, serverAccessPassword,serverAccessPasswordSalt);
             userTableName = getServersUserTable(servername);
         }
         else{
             conn = DriverManager.getConnection(DB_URL, USER, PASS);
-            addNewServer(servername, passwordHash,passwordSalt);
+            addNewServer(servername, passwordHash,passwordSalt, serverAccessPassword, serverAccessPasswordSalt);
             userTableName = getServersUserTable(servername);
         }
 
@@ -46,13 +46,13 @@ public class DatabaseManager {
     }
 
     private void createServerTable() throws Exception{
-        String sqlServersTable = "CREATE TABLE SERVERS (Servername varchar(20), PasswordHash varbinary(512), PasswordSalt varbinary(32), UserTable varchar(20))";
+        String sqlServersTable = "CREATE TABLE SERVERS (Servername varchar(20), PasswordHash varbinary(512), PasswordSalt varbinary(32), UserTable varchar(20), ServerAccessPasswordHash varbinary(512), ServerAccessPasswordSalt varbinary(32))";
         Statement stmt = conn.createStatement();
         stmt.executeUpdate(sqlServersTable);
         stmt.close();
     }
 
-    private void addNewServer(String servername, byte[] passwordHash, byte[] passwordSalt) throws Exception{
+    private void addNewServer(String servername, byte[] passwordHash, byte[] passwordSalt, byte[] serverAccessPasswordHash, byte[] serverAccessPasswordSalt) throws Exception{
 
         Statement stmt = conn.createStatement();
         ResultSet rst = stmt.executeQuery("SELECT COUNT(*) FROM SERVERS");
@@ -61,7 +61,7 @@ public class DatabaseManager {
         String userTableName = "Users" + userTableNO;
 
         String createUsersTableString = "CREATE TABLE " + "Users" + userTableNO + " (Username varchar(20), PasswordHash varbinary(512), PasswordSalt varbinary(32), Privilege int(100))";
-        String insertNewServerString = "INSERT INTO " + SERVER_TABLE + "(Servername, PasswordHash, PasswordSalt, UserTable)" + " VALUES (?,?,?,?)";
+        String insertNewServerString = "INSERT INTO " + SERVER_TABLE + "(Servername, PasswordHash, PasswordSalt, UserTable, ServerAccessPasswordHash, ServerAccessPasswordSalt)" + " VALUES (?,?,?,?,?,?)";
 
         PreparedStatement createUserTablePS = conn.prepareStatement(createUsersTableString);
         PreparedStatement insertNewSeverPS = conn.prepareStatement(insertNewServerString);
@@ -71,6 +71,8 @@ public class DatabaseManager {
         insertNewSeverPS.setBytes(2,passwordHash);
         insertNewSeverPS.setBytes(3,passwordSalt);
         insertNewSeverPS.setString(4,userTableName);
+        insertNewSeverPS.setBytes(5,serverAccessPasswordHash);
+        insertNewSeverPS.setBytes(6,serverAccessPasswordSalt);
 
         insertNewSeverPS.executeUpdate();
         createUserTablePS.executeUpdate();
@@ -199,6 +201,24 @@ public class DatabaseManager {
         }
     }
 
+    public byte[] getServerAccessSalt(String serverName) throws Exception{
+        String getServerAccessSaltString = "SELECT ServerAccessPasswordSalt FROM " + SERVER_TABLE + " WHERE Servername= ?";
+        PreparedStatement getServerAccessSaltPS = conn.prepareStatement(getServerAccessSaltString);
+        ResultSet rst;
+        byte[] salt = null;
+
+        if(doesServerExist(serverName)){
+            getServerAccessSaltPS.setString(1,serverName);
+            rst = getServerAccessSaltPS.executeQuery();
+            rst.next();
+            salt = rst.getBytes("ServerAccessPasswordSalt");
+            getServerAccessSaltPS.clearParameters();
+            rst.close();
+        }
+
+        return salt;
+    }
+
     public int getUserPrivilege(String user) throws Exception{
 
         String getUserPrivilegeString;
@@ -270,6 +290,27 @@ public class DatabaseManager {
 
 
         return response;
+    }
+
+    public boolean verifyServerAccessPassword(String servername, byte[] serverAccessPasswordHash) throws Exception{
+        String verifyServerAccessPasswordHashString = "SELECT ServerAccessPasswordHash FROM " + SERVER_TABLE + " WHERE Servername= ?";
+        PreparedStatement verifyServerAccessPasswordHashPS = conn.prepareStatement(verifyServerAccessPasswordHashString);
+        ResultSet rst;
+        boolean response = false;
+
+        if(doesServerExist(servername)){
+
+            verifyServerAccessPasswordHashPS.setString(1,servername);
+            rst = verifyServerAccessPasswordHashPS.executeQuery();
+            rst.next();
+            response = Arrays.equals(rst.getBytes("ServerAccessPasswordHash"),serverAccessPasswordHash);
+            rst.close();
+            verifyServerAccessPasswordHashPS.clearParameters();
+        }
+
+        return response;
+
+
     }
 
     public void closeDatabaseConnection()throws Exception{

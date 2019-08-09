@@ -35,6 +35,7 @@ public class Client {
     public void connectToServerP1(boolean registerNewUser) throws Exception{
         online = true;
         User serverUser;
+        System.out.println(registerNewUser);
 
         //1. connecting to server
         s = new Socket(host,port);

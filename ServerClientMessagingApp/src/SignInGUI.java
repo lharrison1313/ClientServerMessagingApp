@@ -8,8 +8,8 @@ public class SignInGUI {
 
     JButton submit;
     JLabel errorMessage;
-    JTextField usernameTextField,servernameTextField;
-    JPasswordField passwordTextField, sapTextField;
+    JTextField usernameTextField;
+    JPasswordField passwordTextField, sapTextField, confirmPasswordTextField;
 
     private JFrame frmSignIn;
     private Client client;
@@ -20,31 +20,35 @@ public class SignInGUI {
     boolean registerNewUser;
 
     public SignInGUI(Client client, User serverUser, ObjectOutputStream output, ObjectInputStream input, boolean registerNewUser) throws Exception{
-        initialize();
-        frmSignIn.setVisible(true);
+        this.registerNewUser = registerNewUser;
         this.client = client;
         rsaUtil = new RSA();
         this.serverUser = serverUser;
         this.output = output;
         this.input = input;
-        this.registerNewUser = registerNewUser;
-
+        initialize();
+        frmSignIn.setVisible(true);
     }
 
     private void initialize(){
+
         frmSignIn = new JFrame();
-        frmSignIn.setTitle("Sign in");
+        GridLayout gridLayout;
+
+        if(registerNewUser) {
+            frmSignIn.setTitle("Register");
+            gridLayout = new GridLayout(5,2);
+        }
+        else{
+            frmSignIn.setTitle("Sign in");
+            gridLayout = new GridLayout(4,2);
+        }
+
         frmSignIn.setDefaultCloseOperation(JFrame.EXIT_ON_CLOSE);
-        frmSignIn.setSize(500,150);
+        frmSignIn.setSize(600,150);
         frmSignIn.setResizable(false);
-        GridLayout gridLayout = new GridLayout(5,2);
+
         frmSignIn.setLayout(gridLayout);
-
-        JLabel servername = new JLabel("Server Name");
-        frmSignIn.add(servername);
-
-        servernameTextField = new JTextField();
-        frmSignIn.add(servernameTextField);
 
         JLabel sap = new JLabel("Server Access Password");
         frmSignIn.add(sap);
@@ -64,6 +68,14 @@ public class SignInGUI {
         passwordTextField = new JPasswordField();
         frmSignIn.add(passwordTextField);
 
+        if(registerNewUser){
+            JLabel confirmPasswordLabel = new JLabel("Confirm Password");
+            frmSignIn.add(confirmPasswordLabel);
+            confirmPasswordTextField = new JPasswordField();
+            frmSignIn.add(confirmPasswordTextField);
+
+        }
+
         errorMessage = new JLabel();
         errorMessage.setForeground(Color.red);
         frmSignIn.add(errorMessage);
@@ -72,42 +84,53 @@ public class SignInGUI {
         submit.addActionListener(new ActionListener() {
             public void actionPerformed(ActionEvent e) {
 
+                String username, password, sap;
+                String passwordConfirm = "";
+
                 //getting username from text field
-                String username = usernameTextField.getText();
+                username = usernameTextField.getText();
                 client.setUserName(username);
 
-                //getting password from password field
-                String password = new String(passwordTextField.getPassword());
+                //getting passwords from password field
+                password = new String(passwordTextField.getPassword());
+                if(registerNewUser)
+                    passwordConfirm = new String(confirmPasswordTextField.getPassword());
+                sap = new String(sapTextField.getPassword());
 
-                try {
-                    output.writeBoolean(registerNewUser);
-                    output.writeObject(rsaUtil.encrypt(username, serverUser.getPublicKey()));
-                    output.writeObject(rsaUtil.encrypt(password, serverUser.getPublicKey()));
+                if(!registerNewUser || password.equals(passwordConfirm) ) {
+                    try {
+                        //sending login info to server
+                        output.writeBoolean(registerNewUser);
+                        output.writeObject(rsaUtil.encrypt(sap, serverUser.getPublicKey()));
+                        output.writeObject(rsaUtil.encrypt(username, serverUser.getPublicKey()));
+                        output.writeObject(rsaUtil.encrypt(password, serverUser.getPublicKey()));
 
-                    //getting login success response from server
-                    String response = (String) input.readObject();
+                        //getting login success response from server
+                        String response = (String) input.readObject();
 
+                        if (response.equals("true")) {
+                            frmSignIn.setVisible(false);
+                            frmSignIn.dispose();
+                            client.connectToServerP2();
+                        }
+                        else{
+                            errorMessage.setText("incorrect server access password or login info");
+                        }
 
-                    if (response.equals("false")) {
-                        //resets text fields
-                        errorMessage.setText("error");
-                        servernameTextField.setText("");
-                        sapTextField.setText("");
-                        usernameTextField.setText("");
-                        passwordTextField.setText("");
-                    }
-                    else{
-                        //gets rid of jframe
-                        frmSignIn.setVisible(false);
-                        frmSignIn.dispose();
-                        client.connectToServerP2();
+                    } catch (Exception e1) {
+                        System.out.println("error in sign in gui: " + e);
                     }
                 }
-                catch (Exception e1){
-                    System.out.println("error in sign in gui: " + e);
+                else{
+                    errorMessage.setText("passwords don't match");
                 }
 
+                sapTextField.setText("");
+                usernameTextField.setText("");
+                passwordTextField.setText("");
 
+                if(registerNewUser)
+                    confirmPasswordTextField.setText("");
 
             }
         });
