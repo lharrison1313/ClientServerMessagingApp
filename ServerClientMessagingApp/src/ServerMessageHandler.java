@@ -1,16 +1,10 @@
-import java.util.ArrayList;
-
 public class ServerMessageHandler implements  Runnable{
     private Server server;
-    private ArrayList<String> userNameList;
     private String senderName;
-    private RSA rsaUtil;
 
     public ServerMessageHandler(Server server, String userName, RSA rsaUtil){
         this.server = server;
-        this.userNameList = server.getUserNameList();
         this.senderName = userName;
-        this.rsaUtil = rsaUtil;
 
 
     }
@@ -41,7 +35,7 @@ public class ServerMessageHandler implements  Runnable{
                 }
 
             }
-            System.out.println("user " + senderName + " has left the server");
+            System.out.println("user " + senderName + " has left " + server.getServername() );
         }
     }
 }

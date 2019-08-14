@@ -1,7 +1,5 @@
 import java.awt.*;
 import java.awt.event.*;
-import java.io.ObjectInputStream;
-import java.io.ObjectOutputStream;
 import javax.swing.*;
 
 public class SignInGUI {
@@ -13,19 +11,11 @@ public class SignInGUI {
 
     private JFrame frmSignIn;
     private Client client;
-    private RSA rsaUtil;
-    User serverUser;
-    ObjectOutputStream output;
-    ObjectInputStream input;
     boolean registerNewUser;
 
-    public SignInGUI(Client client, User serverUser, ObjectOutputStream output, ObjectInputStream input, boolean registerNewUser) throws Exception{
+    public SignInGUI(Client client, boolean registerNewUser) throws Exception{
         this.registerNewUser = registerNewUser;
         this.client = client;
-        rsaUtil = new RSA();
-        this.serverUser = serverUser;
-        this.output = output;
-        this.input = input;
         initialize();
         frmSignIn.setVisible(true);
     }
@@ -50,26 +40,26 @@ public class SignInGUI {
 
         frmSignIn.setLayout(gridLayout);
 
-        JLabel sap = new JLabel("Server Access Password");
+        JLabel sap = new JLabel("Server Access Password",SwingConstants.CENTER);
         frmSignIn.add(sap);
 
         sapTextField = new JPasswordField();
         frmSignIn.add(sapTextField);
 
-        JLabel usernameLabel = new JLabel("Username");
+        JLabel usernameLabel = new JLabel("Username",SwingConstants.CENTER);
         frmSignIn.add(usernameLabel);
 
         usernameTextField = new JTextField();
         frmSignIn.add(usernameTextField);
 
-        JLabel passwordLabel = new JLabel("Password");
+        JLabel passwordLabel = new JLabel("Password",SwingConstants.CENTER);
         frmSignIn.add(passwordLabel);
 
         passwordTextField = new JPasswordField();
         frmSignIn.add(passwordTextField);
 
         if(registerNewUser){
-            JLabel confirmPasswordLabel = new JLabel("Confirm Password");
+            JLabel confirmPasswordLabel = new JLabel("Confirm Password",SwingConstants.CENTER);
             frmSignIn.add(confirmPasswordLabel);
             confirmPasswordTextField = new JPasswordField();
             frmSignIn.add(confirmPasswordTextField);
@@ -99,19 +89,11 @@ public class SignInGUI {
 
                 if(!registerNewUser || password.equals(passwordConfirm) ) {
                     try {
-                        //sending login info to server
-                        output.writeBoolean(registerNewUser);
-                        output.writeObject(rsaUtil.encrypt(sap, serverUser.getPublicKey()));
-                        output.writeObject(rsaUtil.encrypt(username, serverUser.getPublicKey()));
-                        output.writeObject(rsaUtil.encrypt(password, serverUser.getPublicKey()));
+                        boolean loginSuccess = client.sendLogInInfo(registerNewUser,sap,username,password);
 
-                        //getting login success response from server
-                        String response = (String) input.readObject();
-
-                        if (response.equals("true")) {
+                        if (loginSuccess) {
                             frmSignIn.setVisible(false);
                             frmSignIn.dispose();
-                            client.connectToServerP2();
                         }
                         else{
                             errorMessage.setText("incorrect server access password or login info");

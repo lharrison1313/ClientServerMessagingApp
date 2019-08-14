@@ -22,66 +22,73 @@ public class Client {
     private int port;
 
 
-    public Client(String host, int port, boolean registerNewUser) throws Exception {
+    public Client(String host, int port) throws Exception {
         this.host = host;
         this.port = port;
         rsaUtil = new RSA();
         userMap = new HashMap<>();
         userNameList = new ArrayList<>();
-        connectToServerP1(registerNewUser);
+        connectToServerP1();
 
     }
 
-    public void connectToServerP1(boolean registerNewUser) throws Exception{
+    private void connectToServerP1() throws Exception{
         online = true;
         User serverUser;
-        System.out.println(registerNewUser);
 
         //1. connecting to server
         s = new Socket(host,port);
-        System.out.println("1");
 
         //2. creating input and output data streams
         input = new ObjectInputStream(s.getInputStream());
         output = new ObjectOutputStream(s.getOutputStream());
-        System.out.println("2");
 
         //3. getting server's user object
         serverUser = (User) input.readObject();
         addUser(serverUser);
         serverName = serverUser.getUserName();
-        System.out.println("3");
 
-        //4. verify servers access password
-        System.out.println("4");
-
-        //5. sending clients sign in and register info to server
-
-        SignInGUI signIn = new SignInGUI(this,serverUser,output,input,registerNewUser);
-
-
-        System.out.println("5");
 
     }
 
-    public void connectToServerP2()throws Exception{
-        //6. sending clients user info
+    public boolean sendLogInInfo(boolean newUser, String serverAccessPassword, String username, String password )throws Exception{
+        boolean loginSuccess;
+
+        //sending login info to server
+        output.writeBoolean(newUser);
+        output.writeObject(rsaUtil.encrypt(serverAccessPassword, userMap.get(serverName).getPublicKey()));
+        output.writeObject(rsaUtil.encrypt(username, userMap.get(serverName).getPublicKey()));
+        output.writeObject(rsaUtil.encrypt(password, userMap.get(serverName).getPublicKey()));
+
+        //getting login success response from server
+        String response = (String) input.readObject();
+
+        if(response.equals("true")){
+            connectToServerP2();
+            loginSuccess = true;
+        }
+        else{
+            loginSuccess = false;
+        }
+
+        return loginSuccess;
+    }
+
+    private void connectToServerP2()throws Exception{
+        //4. sending clients user info
         User clientUser = new User(userName,rsaUtil.getPublicKey());
         userNameList.add(userName);
         userMap.put(userName,clientUser);
         output.writeObject(clientUser);
-        System.out.println("6");
 
-        //7. setting up gui and displaying startup info
+        //5. setting up gui and displaying startup info
         messagingWindow = new MessagingGUI(this);
         messagingWindow.appendTextArea("type $help for list of commands and features");
         messagingWindow.appendTextArea("type to send message or use @user to pm someone");
-        System.out.println("7");
 
-        //8. setting up client message sender and receiver
+        //6. setting up client message sender and receiver
         cmr = new Thread(new ClientMessageReceiver(this));
         cmr.start();
-        System.out.println("8");
     }
 
     public boolean sendMessage(String message){
@@ -246,13 +253,4 @@ public class Client {
         this.userName = userName;
     }
 
-   /* public static void main(String[] args){
-        try {
-            Client c = new Client("localhost",5051);
-        }
-        catch(Exception e){
-            System.out.println(e);
-        }
-    }
-    */
 }

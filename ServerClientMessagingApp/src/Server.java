@@ -4,7 +4,6 @@ import java.io.*;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.Map;
-import java.util.Scanner;
 
 
 public class Server  {
@@ -21,8 +20,7 @@ public class Server  {
     private DatabaseManager dbm;
     private ServerSocket ss;
 
-    public Server(int port) throws Exception{
-
+    public Server(int port, String serverName) throws Exception{
         //initializing user hash maps
         userSockets = new HashMap<>();
         userInput = new HashMap<>();
@@ -31,56 +29,27 @@ public class Server  {
         userMap = new HashMap<>();
         rsaUtil = new RSA();
         ss = new ServerSocket(port);
+        this.servername = serverName;
+        serverUser = new User(serverName,rsaUtil.getPublicKey());
+        dbm = new DatabaseManager(serverName);
+        startServer();
 
     }
 
-    public void initializeServer() throws Exception{
-        Scanner scan = new Scanner(System.in);
-        String response1;
-        String response2;
-        String sap;
-        String password;
-        byte[] salt1, salt2;
-        byte[] hash1, hash2;
-
-
-        System.out.println("build new Database");
-        response1 = scan.nextLine();
-        System.out.println("register a new server or sign in to existing server");
-        response2 = scan.nextLine();
-        System.out.println("enter server name");
-        servername = scan.nextLine();
-        System.out.println("enter password");
-        password = scan.nextLine();
-
-        if(response2.equals("register") && response1.equals("yes")){
-            System.out.println("enter server access password");
-            sap = scan.nextLine();
-            salt1 = RSA.generateSalt(32);
-            salt2 = RSA.generateSalt(32);
-            hash1 = RSA.hashPassword(password,salt1,100000);
-            hash2 = RSA.hashPassword(sap, salt2, 100000);
-            dbm = new DatabaseManager(servername,hash1,salt1, hash2, salt2,true);
-        }
-        else if(response2.equals("register")){
-            System.out.println("enter server access password");
-            sap = scan.nextLine();
-            salt1 = RSA.generateSalt(32);
-            salt2 = RSA.generateSalt(32);
-            hash1 = RSA.hashPassword(password,salt1,100000);
-            hash2 = RSA.hashPassword(sap,salt2,100000);
-            dbm = new DatabaseManager(servername,hash1,salt1,hash2,salt2,false);
-        }
-        else{
-            dbm = new DatabaseManager(servername);
-            salt1 = dbm.getUserSalt(servername,true);
-            hash1 = RSA.hashPassword(password,salt1,100000);
-            System.out.println(dbm.verifyPasswordHash(servername,hash1,true));
-        }
-
-        serverUser = new User(servername,rsaUtil.getPublicKey());
-
+    public Server(int port, String serverName, byte[] password, byte[] passwordSalt, byte[] serverAccessPassword, byte[] sapSalt) throws Exception{
+        userSockets = new HashMap<>();
+        userInput = new HashMap<>();
+        userOutput = new HashMap<>();
+        userNameList = new ArrayList<>();
+        userMap = new HashMap<>();
+        rsaUtil = new RSA();
+        ss = new ServerSocket(port);
+        this.servername = serverName;
+        serverUser = new User(serverName,rsaUtil.getPublicKey());
+        dbm = new DatabaseManager(serverName, password, passwordSalt, serverAccessPassword, sapSalt, false);
+        startServer();
     }
+
 
     public void acceptUser(Socket s) throws Exception{
         ObjectInputStream input;
@@ -96,21 +65,16 @@ public class Server  {
 
 
         //1. acceptingClient
-        System.out.println("1");
 
         //2. creating input and output data streams
         output = new ObjectOutputStream(s.getOutputStream());
         input = new ObjectInputStream(s.getInputStream());
-        System.out.println("2");
 
         //3. sending server's public key
         output.writeObject(serverUser);
-        System.out.println("3");
 
-        //4. verify sever access password
-        System.out.println("4");
 
-        //5. getting register or sign in info from client
+        //4. getting register or sign in info from client
         boolean loginSuccess = false;
         boolean registerNewUser;
 
@@ -130,22 +94,22 @@ public class Server  {
 
                 } else if (registerNewUser) {
 
-                    if (dbm.doesUserExist(userName)) {
+                    if (dbm.doesUserExist(servername,userName)) {
                         loginSuccess = false;
 
                     } else {
                         salt = rsaUtil.generateSalt(32);
                         passwordHash = rsaUtil.hashPassword(password, salt, 200000);
-                        dbm.addNewUser(userName, passwordHash, salt, 1);
+                        dbm.addNewUser(servername,userName, passwordHash, salt, 1);
                         loginSuccess = true;
                     }
 
-                } else if (!dbm.doesUserExist(userName)) {
+                } else if (!dbm.doesUserExist(servername,userName)) {
                     loginSuccess = false;
 
                 } else {
-                    passwordHash = rsaUtil.hashPassword(password, dbm.getUserSalt(userName, false), 200000);
-                    loginSuccess = dbm.verifyPasswordHash(userName, passwordHash, false);
+                    passwordHash = rsaUtil.hashPassword(password, dbm.getUserSalt(servername,userName, false), 200000);
+                    loginSuccess = dbm.verifyPasswordHash(servername,userName, passwordHash, false);
 
                 }
             }
@@ -159,36 +123,30 @@ public class Server  {
 
 
         }
-        System.out.println("5");
 
-        //6. getting clients public key and user info
+        //5. getting clients public key and user info
         tempUser = (User) input.readObject();
         userName = tempUser.getUserName();
         userMap.put(userName, tempUser);
         userNameList.add(userName);
-        System.out.println("6");
 
-        //7. adding user input and output streams to maps
+        //6. adding user input and output streams to maps
         userSockets.put(userName,s);
         userInput.put(userName,input);
         userOutput.put(userName,output);
-        System.out.println("7");
 
-        //8. start message handler
+        //7. start message handler
         messageHandler = new Thread(new ServerMessageHandler(this,userName,rsaUtil));
         messageHandler.start();
-        System.out.println("8");
 
-        //9. sending keys to users
+        //8. sending keys to users
         sendUsers(userName);
-        System.out.println("9");
 
-        //10.displaying newly added user
-        System.out.println("user " + userName + " has been added to the server");
+        //9.displaying newly added user
+        System.out.println("user " + userName + " has been added to" + servername);
         sendMessageAll(userName + " has joined the server");
 
         sendMessage("welcome to the server " + userName, userName);
-        System.out.println("10");
     }
 
     public void startServer() throws Exception{
@@ -320,22 +278,8 @@ public class Server  {
         return new Command(commandEnc,signature,optionEnc,senderEnc,recipientEnc);
     }
 
-    //returns the username list
-    public ArrayList<String> getUserNameList(){
-        return userNameList;
-    }
-
-    public static void main(String[] args){
-        try{
-            Server serve = new Server(5051);
-            serve.initializeServer();
-            serve.startServer();
-
-        }
-        catch (Exception e){
-            System.out.println(e);
-        }
-
+    public String getServername(){
+        return servername;
     }
 
 
