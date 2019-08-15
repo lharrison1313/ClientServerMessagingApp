@@ -22,7 +22,7 @@ public class ClientMessageReceiver implements Runnable {
                     }
                 }
                 catch(Exception e){
-
+                    client.closeConnection();
                     System.out.println("there is a problem in cmr " + e);
                 }
             }

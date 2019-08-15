@@ -3,12 +3,15 @@ import java.awt.event.*;
 import java.io.ObjectInputStream;
 import java.io.ObjectOutputStream;
 import java.net.Socket;
+import java.util.ArrayList;
 import javax.crypto.SealedObject;
 import javax.swing.*;
 
 public class ClientMenuGUI {
+
+    //private JTextField serverNameField;
     private JFrame frmMenu;
-    private JTextField serverNameField;
+    private JComboBox<String> serverNameCombobox;
     private JLabel serverName;
     private JButton register;
     private JButton signin;
@@ -19,6 +22,7 @@ public class ClientMenuGUI {
     private RSA rsaUtil;
     private int masterServerPort;
     private String masterServerHost;
+    private ArrayList<String> serverList;
 
 
 
@@ -48,21 +52,28 @@ public class ClientMenuGUI {
         serverName = new JLabel("Server Name", SwingConstants.CENTER);
         frmMenu.add(serverName);
 
-        serverNameField = new JTextField();
-        frmMenu.add(serverNameField);
+        //serverNameField = new JTextField();
+        //frmMenu.add(serverNameField);
+        serverNameCombobox = new JComboBox<>();
+        for(String x : serverList){
+            serverNameCombobox.addItem(x);
+        }
+        frmMenu.add(serverNameCombobox);
+
 
         signin = new JButton("Sign In");
         signin.addActionListener(new ActionListener() {
             public void actionPerformed(ActionEvent e) {
+                Client c = null;
                 try{
                     String portSuccess;
-                    String serverName = serverNameField.getText();
+                    String serverName = (String) serverNameCombobox.getSelectedItem();
                     if(!serverName.equals("")) {
-                        output.writeObject(rsaUtil.encrypt(serverNameField.getText(), masterServerUser.getPublicKey()));
+                        output.writeObject(rsaUtil.encrypt(serverName, masterServerUser.getPublicKey()));
                         portSuccess = rsaUtil.decrypt((SealedObject) input.readObject());
                         String port = rsaUtil.decrypt((SealedObject) input.readObject());
                         if (portSuccess.equals("true")) {
-                            Client c = new Client(masterServerHost, Integer.parseInt(port));
+                            c = new Client(masterServerHost, Integer.parseInt(port));
                             SignInGUI signInGUI = new SignInGUI(c,false);
                             frmMenu.setVisible(false);
                             frmMenu.dispose();
@@ -71,6 +82,7 @@ public class ClientMenuGUI {
                 }
                 catch(Exception e1){
                     System.out.println(e1);
+                    c.closeConnection();
                 }
             }
         });
@@ -80,8 +92,10 @@ public class ClientMenuGUI {
         register.addActionListener(new ActionListener() {
             @Override
             public void actionPerformed(ActionEvent e) {
+                Client c = null;
+
                 try{
-                    String serverName = serverNameField.getText();
+                    String serverName = (String) serverNameCombobox.getSelectedItem();
                     String portSuccess;
                     if(!serverName.equals("")) {
                         output.writeObject(rsaUtil.encrypt(serverName, masterServerUser.getPublicKey()));
@@ -89,7 +103,7 @@ public class ClientMenuGUI {
                         String port = rsaUtil.decrypt((SealedObject) input.readObject());
 
                         if (portSuccess.equals("true")) {
-                            Client c = new Client(masterServerHost, Integer.parseInt(port));
+                            c = new Client(masterServerHost, Integer.parseInt(port));
                             SignInGUI signInGUI = new SignInGUI(c,true);
                             frmMenu.setVisible(false);
                             frmMenu.dispose();
@@ -99,6 +113,7 @@ public class ClientMenuGUI {
                 }
                 catch(Exception e1){
                     System.out.println(e1);
+                    c.closeConnection();
                 }
             }
         });
@@ -109,17 +124,20 @@ public class ClientMenuGUI {
     public void connectToServer()throws Exception{
 
         Socket s = new Socket(masterServerHost,masterServerPort);
-        System.out.println("1");
+
         //1.getting input and output streams
         input = new ObjectInputStream(s.getInputStream());
         output = new ObjectOutputStream(s.getOutputStream());
-        System.out.println("2");
+
         //2. getting server user info
         masterServerUser = (User) input.readObject();
 
         //3. sending server client user info
         output.writeObject(clientUser);
-        System.out.println("3");
+
+        //4. getting client server List
+        serverList = (ArrayList<String>) input.readObject();
+
 
 
     }

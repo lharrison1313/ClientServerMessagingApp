@@ -13,30 +13,27 @@ public class MasterServer {
 
     private Map<String,Integer> portList;
     private Map<String,Server> serverList;
-    private ArrayList<String> servernameList;
+    private ArrayList<String> serverNameList;
     private User masterServerUser;
     private int portCount;
     RSA rsaUtil;
     DatabaseManager dbm;
     ServerSocket ss;
+    Thread mss;
 
-    public MasterServer() throws Exception{
+    public MasterServer(boolean newDatabase) throws Exception{
         portList = new HashMap<>();
         serverList = new HashMap<>();
-        servernameList = new ArrayList<>();
+        serverNameList = new ArrayList<>();
         portCount = 5051;
         rsaUtil = new RSA();
         masterServerUser = new User("MasterServer",rsaUtil.getPublicKey());
         ss = new ServerSocket(5050);
+        dbm = new DatabaseManager(newDatabase);
+        mss = new Thread(new MasterServerStarter(this));
+        mss.start();
 
-    }
 
-    public void buildNewDatabase(String password, String sap)throws Exception{
-        byte[] salt1 = RSA.generateSalt(32);
-        byte[] salt2 = RSA.generateSalt(32);
-        byte[] hash1 = RSA.hashPassword(password,salt1,100000);
-        byte[] hash2 = RSA.hashPassword(sap, salt2, 100000);
-        dbm = new DatabaseManager("MasterServer",hash1,salt1, hash2, salt2,true);
     }
 
     public void startMasterServer() throws Exception{
@@ -68,7 +65,10 @@ public class MasterServer {
         //3. getting client user object
         clientUser = (User) input.readObject();
 
-        //4. getting port number for client
+        //4. sending client serverLists
+        output.writeObject(serverNameList);
+
+        //5. getting port number for client
         while(!portSuccess){
             servername = rsaUtil.decrypt((SealedObject) input.readObject());
             if (isServerOnline(servername)) {
@@ -87,17 +87,12 @@ public class MasterServer {
 
     }
 
-    public boolean startServer(String serverName, String serverPassword) throws Exception{
-        dbm = new DatabaseManager(serverName);
+    private boolean serverSignIn(String serverName, String serverPassword) throws Exception{
         byte[] salt = dbm.getUserSalt(serverName,serverName,true);
         boolean signInSuccess = false;
         if(salt != null){
             byte[] passwordHash = RSA.hashPassword(serverPassword,salt,100000);
             if(dbm.verifyPasswordHash(serverName,serverName,passwordHash,true)){
-                servernameList.add(serverName);
-                portList.put(serverName,portCount);
-                Server s = new Server(portCount++,serverName);
-                serverList.put(serverName,s);
                 signInSuccess = true;
             }
         }
@@ -106,53 +101,71 @@ public class MasterServer {
 
     }
 
-    public void startServerCreator(String serverName, String serverPassword, String serverAccessPassword){
-        Thread sc = new Thread(new ServerCreator(this,serverName,serverPassword,serverAccessPassword));
-        sc.start();
-    }
+    public boolean startServer(String serverName, String serverPassword) throws Exception{
 
-    public void startServerCreator(String serverName, String serverPassword){
-        Thread sc = new Thread(new ServerCreator(this,serverName,serverPassword));
-        sc.start();
-    }
-
-    public void createNewServer(String serverName, String serverPassword, String serverAccessPassword) throws Exception{
-        byte[] salt1 = RSA.generateSalt(32);
-        byte[] salt2 = RSA.generateSalt(32);
-        byte[] password = RSA.hashPassword(serverPassword,salt1,100000);
-        byte[] sap = RSA.hashPassword(serverAccessPassword,salt2,100000);
-
-        servernameList.add(serverName);
-        portList.put(serverName,portCount);
-        Server s = new Server(portCount++,serverName,password,salt1,sap,salt2);
-        serverList.put(serverName,s);
+        boolean signInSuccess = false;
+        if(serverSignIn(serverName,serverPassword)){
+            serverNameList.add(serverName);
+            portList.put(serverName,portCount);
+            Server s = new Server(portCount++,serverName,dbm);
+            serverList.put(serverName,s);
+            Thread sc = new Thread(new ServerCreator(s));
+            sc.start();
+            signInSuccess = true;
+        }
+        return signInSuccess;
 
     }
 
-    public int getPort(String servername){
+    public boolean stopServer(String serverName){
+        boolean stopServerSuccess = false;
+        if(isServerOnline(serverName)){
+            if(serverList.get(serverName).closeConnection()){
+                serverNameList.remove(serverName);
+                serverList.remove(serverName);
+                stopServerSuccess = true;
+            }
+        }
+        return stopServerSuccess;
+
+    }
+
+
+
+    public boolean createNewServer(String serverName, String serverPassword, String serverAccessPassword) throws Exception{
+
+        boolean newServerSuccess = false;
+
+        if(!dbm.doesServerExist(serverName)) {
+            byte[] salt1 = RSA.generateSalt(32);
+            byte[] salt2 = RSA.generateSalt(32);
+            byte[] password = RSA.hashPassword(serverPassword,salt1,100000);
+            byte[] sap = RSA.hashPassword(serverAccessPassword,salt2,100000);
+            portList.put(serverName, portCount);
+            dbm.addNewServer(serverName, password, salt1, sap, salt2);
+            newServerSuccess = true;
+        }
+
+        return newServerSuccess;
+
+
+    }
+
+    public int getPort(String serverName){
         int port = 0;
-        if(isServerOnline(servername)){
-            port = portList.get(servername);
+        if(isServerOnline(serverName)){
+            port = portList.get(serverName);
         }
         return port;
     }
 
     public boolean isServerOnline(String servername){
-        return servernameList.contains(servername);
+        return serverNameList.contains(servername);
     }
 
+    public ArrayList<String> getAllServerNames(){
 
-    public static void main(String[] args){
-        try {
-            MasterServer m = new MasterServer();
-            m.buildNewDatabase("rooster1","rooster2");
-            m.startServerCreator("Server1","rooster1","rooster2");
-            m.startMasterServer();
-        }
-        catch (Exception e){
-            System.out.println(e);
-        }
+        return dbm.getServerList();
     }
-
 
 }

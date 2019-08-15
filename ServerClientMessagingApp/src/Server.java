@@ -16,12 +16,14 @@ public class Server  {
     private Map<String, User> userMap;
     private RSA rsaUtil;
     private User serverUser;
-    private String servername;
+    private String serverName;
     private DatabaseManager dbm;
     private ServerSocket ss;
+    private boolean online;
 
-    public Server(int port, String serverName) throws Exception{
+    public Server(int port, String serverName,DatabaseManager dbm) throws Exception{
         //initializing user hash maps
+        online = true;
         userSockets = new HashMap<>();
         userInput = new HashMap<>();
         userOutput = new HashMap<>();
@@ -29,14 +31,13 @@ public class Server  {
         userMap = new HashMap<>();
         rsaUtil = new RSA();
         ss = new ServerSocket(port);
-        this.servername = serverName;
+        this.serverName = serverName;
         serverUser = new User(serverName,rsaUtil.getPublicKey());
-        dbm = new DatabaseManager(serverName);
-        startServer();
+        this.dbm = dbm;
 
     }
 
-    public Server(int port, String serverName, byte[] password, byte[] passwordSalt, byte[] serverAccessPassword, byte[] sapSalt) throws Exception{
+    public Server(int port, String serverName, byte[] password, byte[] passwordSalt, byte[] serverAccessPassword, byte[] sapSalt, DatabaseManager dbm) throws Exception{
         userSockets = new HashMap<>();
         userInput = new HashMap<>();
         userOutput = new HashMap<>();
@@ -44,9 +45,10 @@ public class Server  {
         userMap = new HashMap<>();
         rsaUtil = new RSA();
         ss = new ServerSocket(port);
-        this.servername = serverName;
+        this.serverName = serverName;
         serverUser = new User(serverName,rsaUtil.getPublicKey());
-        dbm = new DatabaseManager(serverName, password, passwordSalt, serverAccessPassword, sapSalt, false);
+        this.dbm = dbm;
+        dbm.addNewServer(serverName,password,passwordSalt,serverAccessPassword,sapSalt);
         startServer();
     }
 
@@ -81,12 +83,12 @@ public class Server  {
         while(!loginSuccess){
             registerNewUser = input.readBoolean();
             serverAccessPassword = rsaUtil.decrypt((SealedObject) input.readObject());
-            ServerAccessPasswordSalt = dbm.getServerAccessSalt(servername);
+            ServerAccessPasswordSalt = dbm.getServerAccessSalt(serverName);
             userName = rsaUtil.decrypt((SealedObject) input.readObject());
             password = rsaUtil.decrypt((SealedObject) input.readObject());
 
 
-            if(dbm.verifyServerAccessPassword(servername,rsaUtil.hashPassword(serverAccessPassword,ServerAccessPasswordSalt,100000))) {
+            if(dbm.verifyServerAccessPassword(serverName,rsaUtil.hashPassword(serverAccessPassword,ServerAccessPasswordSalt,100000))) {
 
                 if (isUserOnline(userName)) {
                     loginSuccess = false;
@@ -94,22 +96,22 @@ public class Server  {
 
                 } else if (registerNewUser) {
 
-                    if (dbm.doesUserExist(servername,userName)) {
+                    if (dbm.doesUserExist(serverName,userName)) {
                         loginSuccess = false;
 
                     } else {
                         salt = rsaUtil.generateSalt(32);
                         passwordHash = rsaUtil.hashPassword(password, salt, 200000);
-                        dbm.addNewUser(servername,userName, passwordHash, salt, 1);
+                        dbm.addNewUser(serverName,userName, passwordHash, salt, 1);
                         loginSuccess = true;
                     }
 
-                } else if (!dbm.doesUserExist(servername,userName)) {
+                } else if (!dbm.doesUserExist(serverName,userName)) {
                     loginSuccess = false;
 
                 } else {
-                    passwordHash = rsaUtil.hashPassword(password, dbm.getUserSalt(servername,userName, false), 200000);
-                    loginSuccess = dbm.verifyPasswordHash(servername,userName, passwordHash, false);
+                    passwordHash = rsaUtil.hashPassword(password, dbm.getUserSalt(serverName,userName, false), 200000);
+                    loginSuccess = dbm.verifyPasswordHash(serverName,userName, passwordHash, false);
 
                 }
             }
@@ -143,7 +145,7 @@ public class Server  {
         sendUsers(userName);
 
         //9.displaying newly added user
-        System.out.println("user " + userName + " has been added to" + servername);
+        System.out.println("user " + userName + " has been added to" + serverName);
         sendMessageAll(userName + " has joined the server");
 
         sendMessage("welcome to the server " + userName, userName);
@@ -153,7 +155,7 @@ public class Server  {
         Socket s;
         Thread ua;
 
-        while(true){
+        while(online){
             s = ss.accept();
             ua = new Thread(new ServerUserAcceptor(this,s));
             ua.start();
@@ -278,8 +280,26 @@ public class Server  {
         return new Command(commandEnc,signature,optionEnc,senderEnc,recipientEnc);
     }
 
-    public String getServername(){
-        return servername;
+    public boolean closeConnection(){
+        boolean closeSuccess = false;
+        try{
+            ss.close();
+            closeSuccess = true;
+            online = false;
+        }
+        catch (Exception e){
+            System.out.println("Failed to close server: " + e);
+        }
+        return closeSuccess;
+
+    }
+
+    public boolean isServerOnline(){
+        return online;
+    }
+
+    public String getServerName(){
+        return serverName;
     }
 
 

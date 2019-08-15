@@ -1,8 +1,8 @@
 import javax.crypto.SealedObject;
-import java.io.IOException;
 import java.net.*;
 import java.io.*;
 import java.util.*;
+import java.util.concurrent.*;
 
 public class Client {
 
@@ -17,9 +17,9 @@ public class Client {
     private Map<String, User> userMap;
     private ArrayList<String> userNameList;
     private RSA rsaUtil;
-    private MessagingGUI messagingWindow;
     private String host;
     private int port;
+    private BlockingQueue<String> messageQueue;
 
 
     public Client(String host, int port) throws Exception {
@@ -28,6 +28,7 @@ public class Client {
         rsaUtil = new RSA();
         userMap = new HashMap<>();
         userNameList = new ArrayList<>();
+        messageQueue = new LinkedBlockingQueue<>();
         connectToServerP1();
 
     }
@@ -81,52 +82,54 @@ public class Client {
         userMap.put(userName,clientUser);
         output.writeObject(clientUser);
 
-        //5. setting up gui and displaying startup info
-        messagingWindow = new MessagingGUI(this);
-        messagingWindow.appendTextArea("type $help for list of commands and features");
-        messagingWindow.appendTextArea("type to send message or use @user to pm someone");
+        //5. displaying startup info
+        messageQueue.add("type $help for list of commands and features");
+        messageQueue.add("type to send message or use @user to pm someone");
 
         //6. setting up client message sender and receiver
         cmr = new Thread(new ClientMessageReceiver(this));
         cmr.start();
     }
 
-    public boolean sendMessage(String message){
-        try{
-            if(message.substring(0,1).equals("@") && message.length() >1 && message.contains(" ")){
-                String[] messageList = message.split(" ", 2);
+    public String sendMessage(String message){
+        String response;
+        if(online) {
+            try {
+                if (message.substring(0, 1).equals("@") && message.length() > 1 && message.contains(" ")) {
+                    String[] messageList = message.split(" ", 2);
 
-                String receiver = messageList[0].substring(1);
-                message = messageList[1];
-                sendPrivateMessage(message,receiver);
-                return false;
-            }
-            else if(message.substring(0,1).equals("$") && message.length() >1 && !message.contains(" ")){
-                if(message.substring(1).equals("quit")){
-                    sendServerCommand("quit","none");
-                    return true;
+                    String receiver = messageList[0].substring(1);
+                    message = messageList[1];
+                    sendPrivateMessage(message, receiver);
+                    response = "none";
+                } else if (message.substring(0, 1).equals("$") && message.length() > 1 && !message.contains(" ")) {
+                    if (message.substring(1).equals("quit")) {
+                        sendServerCommand("quit", "none");
+                        response = "quit";
+                    } else {
+                        sendServerCommand(message.substring(1), "none");
+                        response = "none";
+                    }
+                } else {
+                    sendPublicMessage(message);
+                    response = "none";
                 }
-                else {
-                    sendServerCommand(message.substring(1), "none");
-                    return false;
-                }
-            }
-            else{
-                sendPublicMessage(message);
-                return false;
-            }
 
+            } catch (Exception e) {
+                System.out.println("Client Message Sender Error: " + e);
+                response = "disconnect";
+            }
         }
-        catch (Exception e){
-            System.out.println("Client Message Sender Error: " + e);
-            return false;
+        else{
+            response = "disconnect";
         }
+        return  response;
     }
 
     public void processCommand(Command c) throws Exception{
         String command = rsaUtil.decrypt(c.getCommand());
         String option = rsaUtil.decrypt(c.getOption());
-        if(getRsaUtil().verifySignature(c.getCommand(),c.getSignature(),userMap.get(serverName).getPublicKey())){
+        if(rsaUtil.verifySignature(c.getCommand(),c.getSignature(),userMap.get(serverName).getPublicKey())){
             switch (command) {
                 case "removeuser":
                     removeUser(option);
@@ -155,7 +158,7 @@ public class Client {
         Message m = buildEncryptedMessage(String.format("~ %s", message),recipient);
         output.writeObject(m);
         if(!recipient.equals(userName)){
-            messagingWindow.appendTextArea( String.format("%s: ~ %s",userName, message));
+            messageQueue.add(String.format("%s: ~ %s",userName, message));
         }
     }
 
@@ -163,7 +166,7 @@ public class Client {
         String sender = rsaUtil.decrypt(m.getSender());
         String message = rsaUtil.decrypt(m.getMessage());
         if(rsaUtil.verifySignature(m.getMessage(),m.getSignature(),userMap.get(sender).getPublicKey() )){
-                messagingWindow.appendTextArea(String.format("%s: %s", sender,message));
+                messageQueue.add(String.format("%s: %s", sender,message));
 
         }
         else{
@@ -179,20 +182,21 @@ public class Client {
                 closeConnection();
                 break;
             case "users":
-                messagingWindow.appendTextArea("Users Currently Online:");
+                //messagingWindow.appendTextArea("Users Currently Online:");
+                messageQueue.add("Users Currently Online:");
                 for(int x = 0; x < userNameList.size(); x++){
                     if(userNameList.get(x).equals(userName)){
-                        messagingWindow.appendTextArea(String.format("%s <- you", userName));
+                        messageQueue.add(String.format("%s <- you", userName));
                     }
                     else if(!userNameList.get(x).equals(serverName)){
-                        messagingWindow.appendTextArea(userNameList.get(x));
+                        messageQueue.add(userNameList.get(x));
                     }
                 }
                 break;
             case "help":
                 break;
             default:
-                messagingWindow.appendTextArea("command not recognized");
+                messageQueue.add("command not recognized");
                 break;
 
         }
@@ -224,9 +228,15 @@ public class Client {
         return new Command(commandEnc,signature,optionEnc,senderEnc,recipientEnc);
     }
     
-    public void closeConnection() throws IOException{
-        online = false;
-        s.close();
+    public void closeConnection(){
+        try{
+            online = false;
+            s.close();
+        }
+        catch (Exception e){
+            System.err.println("Error when closing connections: " + e);
+        }
+
     }
 
     public boolean isOnline(){
@@ -240,13 +250,13 @@ public class Client {
         }
     }
 
-    public RSA getRsaUtil(){
-        return rsaUtil;
-    }
-
     public void removeUser(String name){
         userNameList.remove(name);
         userMap.remove(name);
+    }
+
+    public BlockingQueue<String> getMessageQueue(){
+        return messageQueue;
     }
 
     public void setUserName(String userName){

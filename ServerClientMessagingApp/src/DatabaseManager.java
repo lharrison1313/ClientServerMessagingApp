@@ -1,59 +1,45 @@
 import java.sql.*;
+import java.util.ArrayList;
 import java.util.Arrays;
 public class DatabaseManager {
 
     private Connection conn;
-    private String userTableName;
     static final String JDBC_DRIVER = "com.mysql.cj.jdbc.Driver";
     static final String DB_URL = "jdbc:mysql://localhost/MESSAGING_APP";
     static final String USER = "root";
     static final String PASS = null;
     static final String SERVER_TABLE = "SERVERS";
 
-    public DatabaseManager(String servername, byte[] passwordHash, byte[] passwordSalt, byte[] serverAccessPassword, byte[] serverAccessPasswordSalt, boolean newDatabase) throws Exception{
-        Class.forName(JDBC_DRIVER);
+    public DatabaseManager(boolean newDatabase)throws Exception{
         if(newDatabase){
             createNewDatabase();
-            conn = DriverManager.getConnection(DB_URL, USER, PASS);
-            createServerTable();
-            addNewServer(servername, passwordHash,passwordSalt, serverAccessPassword,serverAccessPasswordSalt, true);
-            userTableName = getServersUserTable(servername);
         }
-        else{
-            conn = DriverManager.getConnection(DB_URL, USER, PASS);
-            addNewServer(servername, passwordHash,passwordSalt, serverAccessPassword, serverAccessPasswordSalt,false);
-            userTableName = getServersUserTable(servername);
-        }
-
-
-    }
-
-    public DatabaseManager(String servername)throws Exception{
         Class.forName(JDBC_DRIVER);
         conn = DriverManager.getConnection(DB_URL, USER, PASS);
-        userTableName = getServersUserTable(servername);
-
-
+        if(newDatabase){
+            createServerTable();
+        }
     }
 
 
-    private void createNewDatabase() throws Exception{
+    public void createNewDatabase() throws Exception{
         Connection firstConn = DriverManager.getConnection("jdbc:mysql://localhost/",USER,PASS);
         String sql = "CREATE DATABASE MESSAGING_APP";
         Statement stmt = firstConn.createStatement();
         stmt.executeUpdate(sql);
         stmt.close();
         firstConn.close();
+
     }
 
-    private void createServerTable() throws Exception{
+    public void createServerTable() throws Exception{
         String sqlServersTable = "CREATE TABLE SERVERS (Servername varchar(20), PasswordHash varbinary(512), PasswordSalt varbinary(32), UserTable varchar(20), ServerAccessPasswordHash varbinary(512), ServerAccessPasswordSalt varbinary(32))";
         Statement stmt = conn.createStatement();
         stmt.executeUpdate(sqlServersTable);
         stmt.close();
     }
 
-    private void addNewServer(String servername, byte[] passwordHash, byte[] passwordSalt, byte[] serverAccessPasswordHash, byte[] serverAccessPasswordSalt, boolean newDatabase) throws Exception{
+    public void addNewServer(String servername, byte[] passwordHash, byte[] passwordSalt, byte[] serverAccessPasswordHash, byte[] serverAccessPasswordSalt) throws Exception{
 
         Statement stmt = conn.createStatement();
         ResultSet rst = stmt.executeQuery("SELECT COUNT(*) FROM SERVERS");
@@ -77,9 +63,8 @@ public class DatabaseManager {
         insertNewSeverPS.setBytes(6,serverAccessPasswordSalt);
 
         insertNewSeverPS.executeUpdate();
-        if(!newDatabase) {
-            createUserTablePS.executeUpdate();
-        }
+        createUserTablePS.executeUpdate();
+
 
         insertNewSeverPS.clearParameters();
         createUserTablePS.clearParameters();
@@ -174,7 +159,6 @@ public class DatabaseManager {
     }
 
     public byte[] getUserSalt(String serverName, String user, boolean isServer) throws Exception{
-        System.out.println("ye");
         String getUserSaltString;
         PreparedStatement getUserSaltPS;
         byte[] salt;
@@ -272,7 +256,7 @@ public class DatabaseManager {
 
 
             } else {
-                verifyPasswordHashString = "SELECT PasswordHash FROM " + userTableName + " WHERE Username= ?";
+                verifyPasswordHashString = "SELECT PasswordHash FROM " + getServersUserTable(serverName) + " WHERE Username= ?";
 
 
             }
@@ -311,6 +295,23 @@ public class DatabaseManager {
         return response;
 
 
+    }
+
+    public ArrayList<String> getServerList(){
+        ArrayList<String> serverNameList = new ArrayList<>();
+        try {
+            String getServerListString = "SELECT Servername FROM " + SERVER_TABLE;
+            PreparedStatement getServerListPS = conn.prepareStatement(getServerListString);
+            ResultSet rst = getServerListPS.executeQuery();
+            while (rst.next()) {
+                serverNameList.add(rst.getString("Servername"));
+            }
+            return serverNameList;
+        }
+        catch (Exception e){
+            System.out.println(e);
+        }
+        return serverNameList;
     }
 
     public void closeDatabaseConnection()throws Exception{

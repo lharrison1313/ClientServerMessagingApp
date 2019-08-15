@@ -4,14 +4,15 @@ import javax.swing.*;
 
 public class SignInGUI {
 
-    JButton submit;
-    JLabel errorMessage;
-    JTextField usernameTextField;
-    JPasswordField passwordTextField, sapTextField, confirmPasswordTextField;
+    private JButton submit;
+    private JLabel errorMessage;
+    private JTextField usernameTextField;
+    private JPasswordField passwordTextField, sapTextField, confirmPasswordTextField;
 
     private JFrame frmSignIn;
     private Client client;
     boolean registerNewUser;
+
 
     public SignInGUI(Client client, boolean registerNewUser) throws Exception{
         this.registerNewUser = registerNewUser;
@@ -24,6 +25,7 @@ public class SignInGUI {
 
         frmSignIn = new JFrame();
         GridLayout gridLayout;
+        frmSignIn.setLocationRelativeTo(null);
 
         if(registerNewUser) {
             frmSignIn.setTitle("Register");
@@ -94,6 +96,7 @@ public class SignInGUI {
                         if (loginSuccess) {
                             frmSignIn.setVisible(false);
                             frmSignIn.dispose();
+                            MessagingGUI messagingGUI = new MessagingGUI(client);
                         }
                         else{
                             errorMessage.setText("incorrect server access password or login info");

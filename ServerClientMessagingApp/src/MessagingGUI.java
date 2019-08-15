@@ -10,12 +10,16 @@ public class MessagingGUI {
         private JTextArea textArea;
         private JButton btnNewButton;
         private Client client;
+        private Thread mqp;
 
         public MessagingGUI(Client client) {
             initialize();
             frmMessagingApp.getRootPane().setDefaultButton(btnNewButton);
-            frmMessagingApp.setVisible(true);
             this.client = client;
+            mqp = new Thread(new MessageQueuePrinter(client,this));
+            mqp.start();
+            frmMessagingApp.setVisible(true);
+
         }
 
         private void initialize() {
@@ -24,6 +28,7 @@ public class MessagingGUI {
             frmMessagingApp.setBounds(100, 100, 450, 300);
             frmMessagingApp.setSize(750,500);
             frmMessagingApp.setDefaultCloseOperation(JFrame.EXIT_ON_CLOSE);
+            frmMessagingApp.setLocationRelativeTo(null);
             GridBagLayout gridBagLayout = new GridBagLayout();
             gridBagLayout.columnWidths = new int[]{0, 0, 0};
             gridBagLayout.rowHeights = new int[]{0, 0, 0};
@@ -57,12 +62,15 @@ public class MessagingGUI {
 
             btnNewButton.addActionListener(new ActionListener(){
                 public void actionPerformed(ActionEvent e) {
-                    boolean close;
+                    String close;
                     String userInput = textField.getText();
                     textField.setText("");
                     close = client.sendMessage(userInput);
-                    if(close == true){
+                    if(close.equals("quit") ){
                         frmMessagingApp.dispatchEvent(new WindowEvent(frmMessagingApp,WindowEvent.WINDOW_CLOSING));
+                    }
+                    else if(close.equals("disconnect")){
+                        JOptionPane.showMessageDialog(null,"client disconnected from server","Server Disconnect Error",JOptionPane.ERROR_MESSAGE);
                     }
                 }
             });

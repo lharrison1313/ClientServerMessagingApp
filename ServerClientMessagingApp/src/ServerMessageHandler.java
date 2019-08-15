@@ -16,7 +16,7 @@ public class ServerMessageHandler implements  Runnable{
             Object item;
             System.out.println("user " + senderName + " message handler is running");
 
-            while(server.isUserOnline(senderName)){
+            while(server.isUserOnline(senderName) && server.isServerOnline()){
                 try{
 
                      item = server.getObject(senderName);
@@ -35,7 +35,7 @@ public class ServerMessageHandler implements  Runnable{
                 }
 
             }
-            System.out.println("user " + senderName + " has left " + server.getServername() );
+            System.out.println("user " + senderName + " has left " + server.getServerName() );
         }
     }
 }
