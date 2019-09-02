@@ -84,11 +84,12 @@ public class MessagingGUI {
             frmMessagingApp.addWindowListener(new java.awt.event.WindowAdapter() {
                 @Override
                 public void windowClosing(java.awt.event.WindowEvent e) {
-                    try{
-                        client.sendServerCommand("quit","none");
-                    }
-                    catch (Exception e1){
-                        System.out.println("error sending server quit command");
+                    if(client.isOnline()) {
+                        try {
+                            client.sendServerCommand("quit", "none");
+                        } catch (Exception e1) {
+                            System.out.println("error sending server quit command: " + e1);
+                        }
                     }
                     e.getWindow().dispose();
                 }

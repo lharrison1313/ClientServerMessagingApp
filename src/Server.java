@@ -172,6 +172,8 @@ public class Server  {
     //removes all userSockets references from maps
     public void removeUser(String userName) throws Exception{
         userSockets.remove(userName);
+        userInput.get(userName).close();
+        userInput.get(userName).close();
         userInput.remove(userName);
         userOutput.remove(userName);
         userMap.remove(userName);
@@ -183,6 +185,7 @@ public class Server  {
         sendCommandAll("removeuser",userName);
         sendMessageAll(userName + " has left");
     }
+
 
     public void commandProcessor(Command c, String senderName) throws Exception{
         //String command = rsaUtil.decrypt(c.getCommand());
@@ -217,7 +220,7 @@ public class Server  {
         }
         return false;
     }
-    
+
     //Sends the servers user object to a single client
     public void sendServerUser(String recipient) throws Exception{
         userOutput.get(recipient).writeObject(serverUser);
@@ -243,15 +246,19 @@ public class Server  {
     
     //Sends a server command to all clients on server
     public void sendCommandAll(String command, String option) throws Exception{
-        for(int x = 0; x < userNameList.size(); x++){
-            sendCommand(command,option,userNameList.get(x));
+        if(isServerOnline()) {
+            for (int x = 0; x < userNameList.size(); x++) {
+                sendCommand(command, option, userNameList.get(x));
+            }
         }
     }
     
     //Sends a message from the server to all clients
     public void sendMessageAll(String message) throws Exception{
-        for(int x = 0; x < userNameList.size(); x++){
-            sendMessage(message,userNameList.get(x));
+        if(isServerOnline()) {
+            for (int x = 0; x < userNameList.size(); x++) {
+                sendMessage(message, userNameList.get(x));
+            }
         }
     }
 
@@ -270,12 +277,13 @@ public class Server  {
     public boolean closeConnection(){
         boolean closeSuccess = false;
         try{
+            online = false;
             ss.close();
             closeSuccess = true;
-            online = false;
+
         }
         catch (Exception e){
-            System.out.println("Failed to close server: " + e);
+            System.out.println("Failed to close server connection: " + e);
         }
         return closeSuccess;
 

@@ -1,3 +1,4 @@
+import java.awt.*;
 import java.util.concurrent.BlockingQueue;
 
 public class MessageQueuePrinter implements Runnable {
@@ -34,4 +35,5 @@ public class MessageQueuePrinter implements Runnable {
             }
         }
     }
+
 }

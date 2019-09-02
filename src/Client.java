@@ -186,7 +186,8 @@ public class Client {
         //String command = cryptoUtil.decryptAES(c.getCommand());
         //String argument = cryptoUtil.decryptAES(c.getArgument1());
         String command = cryptoUtil.decryptAES(c.getCommand(),c.getIvParam());
-        String argument = cryptoUtil.decryptAES(c.getArgument1(),c.getIvParam());
+        String argument1 = cryptoUtil.decryptAES(c.getArgument1(),c.getIvParam());
+        String argumetn2 = cryptoUtil.decryptAES(c.getArgument2(),c.getIvParam());
 
         //verifying commands signature
         //if(cryptoUtil.verifySignature(c.getCommand(),c.getSignature(),userMap.get(serverName).getPublicKey()))
@@ -195,7 +196,7 @@ public class Client {
             //checking which command was sent
             switch (command) {
                 case "removeuser":
-                    removeUser(argument);
+                    removeUser(argument1);
                     break;
                 default:
                     System.out.println("Command Error: Server attempted unrecognized command");
@@ -308,6 +309,8 @@ public class Client {
     public void closeConnection(){
         try{
             online = false;
+            input.close();
+            output.close();
             s.close();
         }
         catch (Exception e){

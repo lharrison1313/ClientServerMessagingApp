@@ -130,8 +130,6 @@ public class MasterServer {
 
     }
 
-
-
     public boolean createNewServer(String serverName, String serverPassword, String serverAccessPassword) throws Exception{
 
         boolean newServerSuccess = false;
