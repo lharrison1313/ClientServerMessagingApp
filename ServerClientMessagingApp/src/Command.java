@@ -1,24 +1,46 @@
 import javax.crypto.SealedObject;
+import javax.crypto.spec.IvParameterSpec;
+
+/*
+    Purpose: The purpose of this class is store the data needed for a command in order to more easily transport it
+    in an object output stream. It stores the following: the command that needs to be carried out, the sender of the command,
+    the recipient of the command, the commands argument, and the commands signature.
+ */
 
 public class Command implements java.io.Serializable {
 
-    private SealedObject command, sender, recipient,option, signature;
+    private SealedObject command, sender, recipient, argument1, argument2;
+    private byte[] signature, iv;
 
-    //command object consist of a command, an option for that command, a sender and a recipient
-    public Command(SealedObject command,SealedObject signature, SealedObject option, SealedObject sender, SealedObject recipient) {
+
+    public Command(SealedObject command, SealedObject argument1, SealedObject argument2, SealedObject sender, SealedObject recipient, byte[] signature, byte[] iv){
         this.command = command;
-        this.signature = signature;
+        this.argument1 = argument1;
+        this.argument2 = argument2;
         this.sender = sender;
         this.recipient = recipient;
-        this.option = option;
+        this.signature = signature;
+        this.iv = iv;
     }
 
-    public SealedObject getOption() {
-        return option;
+    public void setSignature(byte[] signature) {
+        this.signature = signature;
     }
 
-    public void setOption(SealedObject option) {
-        this.option = option;
+    public SealedObject getArgument2() {
+        return argument2;
+    }
+
+    public void setArgument2(SealedObject argument2) {
+        this.argument2 = argument2;
+    }
+
+    public SealedObject getArgument1() {
+        return argument1;
+    }
+
+    public void setArgument1(SealedObject argument) {
+        this.argument1 = argument;
     }
 
     public SealedObject getCommand() {
@@ -47,11 +69,12 @@ public class Command implements java.io.Serializable {
         this.recipient = recipient;
     }
 
-    public SealedObject getSignature() {
-        return signature;
+
+    public IvParameterSpec getIvParam(){
+        return new IvParameterSpec(iv);
     }
 
-    public void setSignature(SealedObject signature) {
-        this.signature = signature;
+    public byte[] getSignature(){
+        return signature;
     }
 }

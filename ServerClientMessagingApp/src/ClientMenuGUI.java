@@ -19,7 +19,7 @@ public class ClientMenuGUI {
     public User clientUser;
     private ObjectInputStream input;
     private ObjectOutputStream output;
-    private RSA rsaUtil;
+    private Crypto rsaUtil;
     private int masterServerPort;
     private String masterServerHost;
     private ArrayList<String> serverList;
@@ -29,7 +29,7 @@ public class ClientMenuGUI {
     public ClientMenuGUI(String masterServerHost, int masterServerPort) throws Exception{
         this.masterServerHost = masterServerHost;
         this.masterServerPort = masterServerPort;
-        rsaUtil = new RSA();
+        rsaUtil = new Crypto();
         clientUser = new User("tempuser",rsaUtil.getPublicKey());
         connectToServer();
         initialize();

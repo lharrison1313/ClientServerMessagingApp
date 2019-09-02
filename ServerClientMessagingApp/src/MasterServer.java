@@ -16,7 +16,7 @@ public class MasterServer {
     private ArrayList<String> serverNameList;
     private User masterServerUser;
     private int portCount;
-    RSA rsaUtil;
+    Crypto rsaUtil;
     DatabaseManager dbm;
     ServerSocket ss;
     Thread mss;
@@ -26,7 +26,7 @@ public class MasterServer {
         serverList = new HashMap<>();
         serverNameList = new ArrayList<>();
         portCount = 5051;
-        rsaUtil = new RSA();
+        rsaUtil = new Crypto();
         masterServerUser = new User("MasterServer",rsaUtil.getPublicKey());
         ss = new ServerSocket(5050);
         dbm = new DatabaseManager(newDatabase);
@@ -91,7 +91,7 @@ public class MasterServer {
         byte[] salt = dbm.getUserSalt(serverName,serverName,true);
         boolean signInSuccess = false;
         if(salt != null){
-            byte[] passwordHash = RSA.hashPassword(serverPassword,salt,100000);
+            byte[] passwordHash = Crypto.hashPassword(serverPassword,salt,100000);
             if(dbm.verifyPasswordHash(serverName,serverName,passwordHash,true)){
                 signInSuccess = true;
             }
@@ -137,10 +137,10 @@ public class MasterServer {
         boolean newServerSuccess = false;
 
         if(!dbm.doesServerExist(serverName)) {
-            byte[] salt1 = RSA.generateSalt(32);
-            byte[] salt2 = RSA.generateSalt(32);
-            byte[] password = RSA.hashPassword(serverPassword,salt1,100000);
-            byte[] sap = RSA.hashPassword(serverAccessPassword,salt2,100000);
+            byte[] salt1 = Crypto.generateSalt(32);
+            byte[] salt2 = Crypto.generateSalt(32);
+            byte[] password = Crypto.hashPassword(serverPassword,salt1,100000);
+            byte[] sap = Crypto.hashPassword(serverAccessPassword,salt2,100000);
             portList.put(serverName, portCount);
             dbm.addNewServer(serverName, password, salt1, sap, salt2);
             newServerSuccess = true;
@@ -160,7 +160,12 @@ public class MasterServer {
     }
 
     public boolean isServerOnline(String servername){
+
         return serverNameList.contains(servername);
+    }
+
+    public Server getServer(String serverName){
+        return serverList.get(serverName);
     }
 
     public ArrayList<String> getAllServerNames(){

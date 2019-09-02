@@ -28,7 +28,7 @@ public class MasterServerMenuGUI {
 
     private void initialize(){
         frmMasterServerMenu = new JFrame();
-        frmMasterServerMenu.setDefaultCloseOperation(JFrame.HIDE_ON_CLOSE);
+        frmMasterServerMenu.setDefaultCloseOperation(JFrame.EXIT_ON_CLOSE);
         frmMasterServerMenu.setTitle("Master Server");
         frmMasterServerMenu.setSize(700,700);
         frmMasterServerMenu.setResizable(false);
@@ -147,6 +147,12 @@ public class MasterServerMenuGUI {
         admin_GBC.fill = GridBagConstraints.HORIZONTAL;
         admin_GBC.insets = new Insets(10,10,10,10);
         admin.setVisible(false);
+        admin.addActionListener(new ActionListener() {
+            @Override
+            public void actionPerformed(ActionEvent e) {
+                ServerAdminPanelGUI sapGUI = new ServerAdminPanelGUI(ms.getServer((String) serverList.getSelectedItem()));
+            }
+        });
         frmMasterServerMenu.getContentPane().add(admin,admin_GBC);
 
         JScrollPane serverDialogScrollPane = new JScrollPane();

@@ -14,7 +14,7 @@ public class Server  {
     private Map<String, ObjectOutputStream> userOutput;
     private ArrayList<String> userNameList;
     private Map<String, User> userMap;
-    private RSA rsaUtil;
+    private Crypto rsaUtil;
     private User serverUser;
     private String serverName;
     private DatabaseManager dbm;
@@ -29,7 +29,8 @@ public class Server  {
         userOutput = new HashMap<>();
         userNameList = new ArrayList<>();
         userMap = new HashMap<>();
-        rsaUtil = new RSA();
+        rsaUtil = new Crypto();
+        rsaUtil.generateSharedKey();
         ss = new ServerSocket(port);
         this.serverName = serverName;
         serverUser = new User(serverName,rsaUtil.getPublicKey());
@@ -43,7 +44,8 @@ public class Server  {
         userOutput = new HashMap<>();
         userNameList = new ArrayList<>();
         userMap = new HashMap<>();
-        rsaUtil = new RSA();
+        rsaUtil = new Crypto();
+        rsaUtil.generateSharedKey();
         ss = new ServerSocket(port);
         this.serverName = serverName;
         serverUser = new User(serverName,rsaUtil.getPublicKey());
@@ -65,18 +67,14 @@ public class Server  {
         Thread messageHandler;
         User tempUser;
 
-
-        //1. acceptingClient
-
-        //2. creating input and output data streams
+        //1. creating input and output data streams
         output = new ObjectOutputStream(s.getOutputStream());
         input = new ObjectInputStream(s.getInputStream());
 
-        //3. sending server's public key
+        //2. sending server's public key
         output.writeObject(serverUser);
 
-
-        //4. getting register or sign in info from client
+        //3. getting register or sign in info from client
         boolean loginSuccess = false;
         boolean registerNewUser;
 
@@ -126,11 +124,15 @@ public class Server  {
 
         }
 
-        //5. getting clients public key and user info
+        //4. getting clients public key and user info
         tempUser = (User) input.readObject();
         userName = tempUser.getUserName();
         userMap.put(userName, tempUser);
         userNameList.add(userName);
+
+        //5 sending client shared key
+        output.writeObject(rsaUtil.encryptKey(tempUser.getPublicKey()));
+
 
         //6. adding user input and output streams to maps
         userSockets.put(userName,s);
@@ -138,7 +140,7 @@ public class Server  {
         userOutput.put(userName,output);
 
         //7. start message handler
-        messageHandler = new Thread(new ServerMessageHandler(this,userName,rsaUtil));
+        messageHandler = new Thread(new ServerMessageHandler(this,userName));
         messageHandler.start();
 
         //8. sending keys to users
@@ -183,11 +185,15 @@ public class Server  {
     }
 
     public void commandProcessor(Command c, String senderName) throws Exception{
-        String command = rsaUtil.decrypt(c.getCommand());
-        String option = rsaUtil.decrypt(c.getOption());
+        //String command = rsaUtil.decrypt(c.getCommand());
+        //String argument = rsaUtil.decrypt(c.getArgument1());
+        String command = rsaUtil.decryptAES(c.getCommand(),c.getIvParam());
+        String argument1 = rsaUtil.decryptAES(c.getArgument1(),c.getIvParam());
+        String argument2 = rsaUtil.decryptAES(c.getArgument2(),c.getIvParam());
 
         //new server commands can be added below to switch statement
-        if(rsaUtil.verifySignature(c.getCommand(),c.getSignature(),userMap.get(senderName).getPublicKey())){
+        //if(rsaUtil.verifySignature(c.getCommand(),c.getSignature(),userMap.get(senderName).getPublicKey()))
+        if(rsaUtil.verifyCommandSignature(c,userMap.get(senderName).getPublicKey())){
             switch (command){
                 case "quit":
                     removeUser(senderName);
@@ -230,8 +236,9 @@ public class Server  {
     }
     
     //Sends a server command to a single recipient
-    public void sendCommand(String command, String option, String recipient)throws Exception{
-        userOutput.get(recipient).writeObject(buildEncryptedCommand(command,option,recipient));
+    public void sendCommand(String command, String argument, String recipient)throws Exception{
+        //userOutput.get(recipient).writeObject(buildEncryptedCommand(command,argument,recipient));
+        userOutput.get(recipient).writeObject(rsaUtil.encryptCommandAES(command,argument,"none",serverName,recipient));
     }
     
     //Sends a server command to all clients on server
@@ -250,35 +257,15 @@ public class Server  {
 
     //Sends a single message from the server to a single recipient
     public void sendMessage(String message, String recipient) throws Exception{
-        userOutput.get(recipient).writeObject(buildEncryptedMessage(message,recipient));
+        //userOutput.get(recipient).writeObject(buildEncryptedMessage(message,recipient));
+        userOutput.get(recipient).writeObject(rsaUtil.encryptMessageAES(message,serverName,recipient));
     }
     
     //relays a message from the sender to the recipient without looking at the contents of the message
     public void relayMessage(Message m) throws Exception{
-        userOutput.get(rsaUtil.decrypt(m.getRecipient())).writeObject(m);
+        userOutput.get(rsaUtil.decryptAES(m.getRecipient(),m.getIv())).writeObject(m);
     }
 
-    //builds an encrypted message object given strings of the message body and recipient
-    public Message buildEncryptedMessage(String message, String recipient) throws Exception{
-        //creating encrypted message objects
-        SealedObject messageEnc = rsaUtil.encrypt(message,userMap.get(recipient).getPublicKey());
-        SealedObject signature = rsaUtil.sign(message);
-        SealedObject senderEnc = rsaUtil.encrypt(serverUser.getUserName(), userMap.get(recipient).getPublicKey());
-        SealedObject recipientEnc = rsaUtil.encrypt(recipient, userMap.get(recipient).getPublicKey());
-
-        return new Message(messageEnc,senderEnc,recipientEnc,signature);
-    }
-
-    //builds an encrypted command object given the command an option and a recipient
-    public Command buildEncryptedCommand(String command, String option, String recipient) throws Exception{
-        SealedObject commandEnc = rsaUtil.encrypt(command,userMap.get(recipient).getPublicKey());
-        SealedObject signature = rsaUtil.sign(command);
-        SealedObject optionEnc = rsaUtil.encrypt(option, userMap.get(recipient).getPublicKey());
-        SealedObject senderEnc = rsaUtil.encrypt(serverUser.getUserName(), userMap.get(recipient).getPublicKey());
-        SealedObject recipientEnc = rsaUtil.encrypt(recipient, userMap.get(recipient).getPublicKey());
-
-        return new Command(commandEnc,signature,optionEnc,senderEnc,recipientEnc);
-    }
 
     public boolean closeConnection(){
         boolean closeSuccess = false;
@@ -292,6 +279,46 @@ public class Server  {
         }
         return closeSuccess;
 
+    }
+
+    public int getUserPrivilege(String username) throws Exception{
+        return dbm.getUserPrivilege(serverName,username);
+    }
+
+    public ArrayList<String> getAllUsers(){
+        return dbm.getUserList(serverName);
+    }
+
+    public void setUserPrivilege(String username, int privilege) throws Exception{
+
+        String message1 = "";
+        String message2 = "";
+
+        dbm.setUserPrivilege(serverName,username,privilege);
+
+        switch (privilege){
+            case 0:
+                message1 = "You have been muted by the server and will no longer be able to send messages";
+                message2 = "User " + username + " has been muted by the server";
+                break;
+            case 1:
+                message1 = "Your privilege has been changed to User (1)";
+                message2 = "User " + username + " is now an User";
+                break;
+            case 2:
+                message1 = "Your privilege has been changed to  Admin (2)";
+                message2 = "User " + username + " is now an Admin";
+                break;
+            case 3:
+                message1 = "Your privilege has been changed to Owner (3)";
+                message2 = "User " + username + " is now an Owner";
+                break;
+
+        }
+        if(isUserOnline(username)){
+            sendMessage(message1,username);
+        }
+        sendMessageAll(message2);
     }
 
     public boolean isServerOnline(){

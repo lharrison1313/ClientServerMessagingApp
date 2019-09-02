@@ -1,15 +1,21 @@
 import javax.crypto.SealedObject;
+import javax.crypto.spec.IvParameterSpec;
 
 public class Message implements java.io.Serializable {
 
-    private SealedObject message, sender, recipient, signature;
+    private SealedObject message, sender, recipient;
+    private byte[] signature,iv;
 
-    //a message object consists of a message body, a sender and a recipient
-    public Message(SealedObject message, SealedObject sender, SealedObject recipient, SealedObject signature){
+    public Message(SealedObject message, SealedObject sender, SealedObject recipient, byte[] iv, byte[] signature){
         this.message = message;
         this.recipient = recipient;
         this.sender = sender;
+        this.iv = iv;
         this.signature = signature;
+    }
+
+    public IvParameterSpec getIv(){
+        return new IvParameterSpec(iv);
     }
 
     public SealedObject getMessage() {
@@ -24,15 +30,19 @@ public class Message implements java.io.Serializable {
         return sender;
     }
 
-    public SealedObject getSignature(){
+    public byte[] getSignature(){
         return signature;
+    }
+
+    public void setIv(byte[] iv){
+        this.iv = iv;
     }
 
     public void setMessage(SealedObject message) {
         this.message = message;
     }
 
-    public void setSignature(SealedObject signature){ this.signature = signature;}
+    public void setSignature(byte[] signature){ this.signature = signature;}
 
     public void setRecipient(SealedObject recipient) {
         this.recipient = recipient;

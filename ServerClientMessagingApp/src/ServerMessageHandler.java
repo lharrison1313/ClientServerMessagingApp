@@ -1,8 +1,10 @@
+import javax.xml.crypto.Data;
+
 public class ServerMessageHandler implements  Runnable{
     private Server server;
     private String senderName;
 
-    public ServerMessageHandler(Server server, String userName, RSA rsaUtil){
+    public ServerMessageHandler(Server server, String userName){
         this.server = server;
         this.senderName = userName;
 
@@ -22,10 +24,12 @@ public class ServerMessageHandler implements  Runnable{
                      item = server.getObject(senderName);
                      //if the object is a message relay the message to the recipient
                      if(item instanceof Message){
-                         server.relayMessage((Message) item);
+                         if(server.getUserPrivilege(senderName) != 0){
+                             server.relayMessage((Message) item);
+                         }
                      }
                      //if the object is a command execute the command
-                     else if(item instanceof  Command){
+                     else if(item instanceof Command){
                          server.commandProcessor((Command) item, senderName);
                      }
 
